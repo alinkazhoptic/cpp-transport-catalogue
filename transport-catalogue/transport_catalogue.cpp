@@ -35,39 +35,102 @@ void TransportCatalogue::AddBus(Bus new_bus) {
 
 }
 
+void TransportCatalogue::AddBus(std::string_view bus_name, const std::vector<std::string_view>& stops_names) {
+    // сюда будем записывать набор уникальных остановок
+    std::unordered_set<std::string_view> unique_stops;
+    // а здесь собирать указатели на найденные остановки 
+    std::vector<const transport::Stop*> stops_on_route;
+    
+    for (std::string_view stop_name_cur : stops_names) {
+        // ищем остановку в справочнике
+        const transport::Stop* stop_cur = FindStop(stop_name_cur);
+        // если нашлась, то добавляем в список остановок по автобусу
+        if (!stop_cur->name.empty()) {
+            // добавляем название остановки в перечень уникальных
+            unique_stops.insert(stop_cur->name);
+            // перемещаем остановку в массив остановок
+            stops_on_route.push_back(stop_cur);  // было с move, но т.к. возвращаем const указатель, то перемещать нельзя
+        }
+        // если не нашлась, то остановка не будет добавлена
+        // можно добавлять "пустую" остановку, имеющую только имя
+    }
 
-Stop* TransportCatalogue::FindStop(std::string_view stop_name) const{
+    // заполняем информацию о маршруте
+    transport::Bus bus_cur;
+    bus_cur.name = bus_name;
+    bus_cur.stops_on_route = stops_on_route;  // было с move
+    bus_cur.unique_stops = std::move(unique_stops);
+
+    // добавляем маршрут в справочник 
+    AddBus(std::move(bus_cur));   
+    
+}
+
+
+const Stop* TransportCatalogue::FindStop(std::string_view stop_name) const{
     // если запрашиваемой остановки нет в базе, то возвращаем пустую "остановку"
     if (!stops_dictionary_.count(stop_name)) {
-        Stop* empty_stop = new Stop{};
-        return empty_stop;
+        return nullptr;
     }
     return stops_dictionary_.at(stop_name);
 }
 
 
-Bus* TransportCatalogue::FindBus(std::string_view bus_name) const {
+const Bus* TransportCatalogue::FindBus(std::string_view bus_name) const {
     if (!buses_dictionary_.count(bus_name)) {
-        Bus* empty_bus = new Bus{};
-        return empty_bus;
+        return nullptr;
     }
     return buses_dictionary_.at(bus_name);
 }
+
+
+namespace detail {
+
+// проверяет, есть ли остановка/инфа об остановке по указателю
+bool IsStop(const Stop* stop_to_check) {
+    if (stop_to_check == nullptr) {
+        return false;
+    }
+    if (stop_to_check->name.empty()) {
+        return false;
+    }
+    return true;
+}
+
+
+// проверяет, есть ли маршрут/инфа о маршруте по указателю
+bool IsBus(const Bus* bus_to_check) {
+    if (bus_to_check == nullptr) {
+        return false;
+    }
+    if (bus_to_check->name.empty()) {
+        return false;
+    }
+    return true;
+}
+
+double ComputeRouteLength(const Bus* bus) {
+    double route_length = 0;
+    for (size_t i = 1; i < bus->stops_on_route.size(); i++) {
+        route_length += geo::ComputeDistance(bus->stops_on_route[i]->coordinates, bus->stops_on_route[i-1]->coordinates);
+    }
+    return route_length;
+}
+
+} // namespace detail
 
 
 /**
  * Возвращает информацию о маршруте в виде структуры BusInfo.
  * Если маршрут не найден, то статусное поле valid_state будет false.
 */
-BusInfo TransportCatalogue::GetBusInfo(std::string_view bus_name) const{
-    Bus* bus_ptr = FindBus(bus_name);
+std::optional<BusInfo> TransportCatalogue::GetBusInfo(std::string_view bus_name) const{
+    const Bus* bus_ptr = FindBus(bus_name);
     if (!detail::IsBus(bus_ptr)) {
-        BusInfo bus_empty_info = {};
-        // статус valid_state будет false
-        return bus_empty_info;
+        return std::nullopt;
     }
     BusInfo bus_info;
-    bus_info.valid_state = true;  // автобус есть
+    // bus_info.valid_state = true;  // автобус есть
     bus_info.name = bus_ptr->name;  // добавляем имя
     bus_info.num_of_stops_on_route = bus_ptr->stops_on_route.size();  // добавляем количество всех остановок
     bus_info.num_of_unique_stops = bus_ptr->unique_stops.size();  // // добавляем количество уникальных остановки
@@ -83,11 +146,10 @@ BusInfo TransportCatalogue::GetBusInfo(std::string_view bus_name) const{
      * Если остановки нет, то вернет структуру со статусом valid_state  false
      * Если остановка есть, но автобусы через нее не проходят, то buses_list будет пуст
     */
-StopInfo TransportCatalogue::GetStopInfo(std::string_view stop_name) const {
-    Stop* stop_ptr = FindStop(stop_name);
+std::optional<StopInfo> TransportCatalogue::GetStopInfo(std::string_view stop_name) const {
+    const Stop* stop_ptr = FindStop(stop_name);
     if (!detail::IsStop(stop_ptr)) {
-        // статус valid_state будет false
-        return {};
+        return std::nullopt;
     }
 
     // вытаскиваем автобусы по данной остановке, список автобусов м.б. пуст
@@ -95,38 +157,10 @@ StopInfo TransportCatalogue::GetStopInfo(std::string_view stop_name) const {
     // сортируем по алфавиту
     std::sort(buses_at_stop.begin(), buses_at_stop.end());
     // формируем выходную информацию
+    StopInfo stop_info = {std::string(stop_name), buses_at_stop};
 
-    return {std::string(stop_name), buses_at_stop, true};
+    return stop_info;
 }
 
-
-namespace detail {
-
-// проверяет, есть ли остановка/инфа об остановке по указателю
-bool IsStop(Stop* stop_to_check) {
-    if (stop_to_check->name.empty()) {
-        return false;
-    }
-    return true;
-}
-
-
-// проверяет, есть ли маршрут/инфа о маршруте по указателю
-bool IsBus(Bus* bus_to_check) {
-    if (bus_to_check->name.empty()) {
-        return false;
-    }
-    return true;
-}
-
-double ComputeRouteLength(Bus* bus) {
-    double route_length = 0;
-    for (size_t i = 1; i < bus->stops_on_route.size(); i++) {
-        route_length += geo::ComputeDistance(bus->stops_on_route[i]->coordinates, bus->stops_on_route[i-1]->coordinates);
-    }
-    return route_length;
-}
-
-} // namespace detail
 
 }  // namespace transport

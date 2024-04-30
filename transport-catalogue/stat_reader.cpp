@@ -44,37 +44,36 @@ void ParseAndPrintStat(const TransportCatalogue& transport_catalogue, std::strin
     RequestDescription request_cur = ParseRequestDescription(request);
     // если строка оказалась пустая, то ничего не выводим в output
     if (!request_cur) {
-        // output << ""s;
         return;
     }
 
     // обработка запроса Bus
     if (request_cur.request == "Bus"s) {
-        BusInfo bus_info = transport_catalogue.GetBusInfo(request_cur.id);
+        std::optional<BusInfo> bus_info = transport_catalogue.GetBusInfo(request_cur.id);
         
         // если автобус не найден, выводим not found
-        if (!bus_info.valid_state) {
+        if (!bus_info) {
             output << "Bus "s << request_cur.id << ": not found"s << std::endl;
             return;
         }
 
         // Bus X: R stops on route, U unique stops, L route length
         output << "Bus "s << request_cur.id << ": "s;
-        output << bus_info.num_of_stops_on_route << " stops on route, "s;
-        output << bus_info.num_of_unique_stops << " unique stops, "s;
-        output << std::setprecision(6) << bus_info.route_length << " route length"s << std::endl;
+        output << bus_info->num_of_stops_on_route << " stops on route, "s;
+        output << bus_info->num_of_unique_stops << " unique stops, "s;
+        output << std::setprecision(6) << bus_info->route_length << " route length"s << std::endl;
     }
 
     if (request_cur.request == "Stop"s) {
-        StopInfo stop_info = transport_catalogue.GetStopInfo(request_cur.id);
+        std::optional<StopInfo> stop_info = transport_catalogue.GetStopInfo(request_cur.id);
         // проверяем, существует ли остановка
-        if (!stop_info.valid_state) {
+        if (!stop_info) {
             output << "Stop "s << request_cur.id << ": not found"s << std::endl;
             return; 
         }
 
         // есть ли маршруты через остановку
-        if (stop_info.buses_list.empty()) {
+        if (stop_info->buses_list.empty()) {
             output << "Stop "s << request_cur.id << ": no buses"s << std::endl;
             return;
         }
@@ -83,7 +82,7 @@ void ParseAndPrintStat(const TransportCatalogue& transport_catalogue, std::strin
         output << "Stop "s << request_cur.id << ": "s;
         output << "buses"s;
 
-        for (auto bus_name : stop_info.buses_list) {
+        for (auto bus_name : stop_info->buses_list) {
             output << " "s << bus_name;
         }
         output << std::endl;

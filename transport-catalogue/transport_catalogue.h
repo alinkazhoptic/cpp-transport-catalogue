@@ -4,6 +4,7 @@
 
 #include <string>
 #include <deque>
+#include <optional>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -19,7 +20,7 @@ struct Stop {
 
 struct Bus {
     std::string name;
-    std::vector<Stop*> stops_on_route;
+    std::vector<const Stop*> stops_on_route;
     std::unordered_set<std::string_view> unique_stops;
 };
 
@@ -29,13 +30,12 @@ struct BusInfo {
     int num_of_stops_on_route;
     int num_of_unique_stops;
     double route_length;
-    bool valid_state = false;
 };
+
 
 struct StopInfo {
     std::string name;
     std::vector<std::string_view> buses_list;
-    bool valid_state = false;
 };
 
 
@@ -64,22 +64,23 @@ public:
     
     void AddStop(Stop new_stop);
     void AddBus(Bus new_bus);
+    void AddBus(std::string_view bus_name, const std::vector<std::string_view>& stops_names);
 
-    Stop* FindStop(std::string_view stop_name) const;
-    Bus* FindBus(std::string_view bus_name) const;
+    const Stop* FindStop(std::string_view stop_name) const;
+    const Bus* FindBus(std::string_view bus_name) const;
 
     /** 
      * возвращает инфу по маршруту (список остановок) в виде структуры
      * если маршрута нет, то вернет структуру со статусом valid_state  false
     */
-    BusInfo GetBusInfo(std::string_view bus_name) const;
+    std::optional<BusInfo> GetBusInfo(std::string_view bus_name) const;
 
     /** 
      * возвращает инфу по остановке (список автобусов) в виде структуры
      * если остановки нет, то вернет структуру со статусом valid_state  false
      * если остановка есть, но автобусы через нее не проходят, то buses_list будет пуст
     */
-    StopInfo GetStopInfo(std::string_view stop_name) const;
+    std::optional<StopInfo> GetStopInfo(std::string_view stop_name) const;
 
 
 
@@ -96,16 +97,6 @@ private:
 
 };
 
-namespace detail {
-
-// Проверяет наличие остановки по указателю
-bool IsStop(Stop* stop_to_check);
-// Проверяет наличие автобуса по указателю
-bool IsBus(Bus* bus_to_check);
-// Считает длину пути по маршруту
-double ComputeRouteLength(Bus* bus);
-
-}  // namespace detail
 
 
 }  // namespace transport

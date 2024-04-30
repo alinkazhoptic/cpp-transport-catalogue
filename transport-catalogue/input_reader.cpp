@@ -160,7 +160,7 @@ void InputReader::AddStopsToCatalogue([[maybe_unused]] transport::TransportCatal
 
 
         // вытаскиваем координаты:
-        std::string coordinates_str = std::string(detail::Trim(command_cur.description));
+        std::string_view coordinates_str = detail::Trim(command_cur.description);
         // DeleteExcessIntraSpaces(coordinates_str);  // удалили лишние пробелы
         geo::Coordinates coordinates = detail::ParseCoordinates(coordinates_str);
 
@@ -183,44 +183,19 @@ void InputReader::AddBusesToCatalogue([[maybe_unused]] transport::TransportCatal
             continue;
         }
 
-        // вытаскиваем имя маршрута  без пробелов в начале и в конце
+         // вытаскиваем имя маршрута  без пробелов в начале и в конце
         std::string bus_name = std::string(detail::Trim(command_cur.id));
-        // DeleteExcessIntraSpaces(bus_name);  // удаляем лишние пробелы в середине
+        // DeleteExcessIntraSpaces(bus_name);  // удаляем лишние пробелы в середине, 
 
         // вытаскиваем маршрут:
-        std::string route_str = std::string(detail::Trim(command_cur.description));
+        std::string_view route_str = detail::Trim(command_cur.description);
         // DeleteExcessIntraSpaces(route_str);  // удалили лишние пробелы
 
         // вытаскиваем все остановки
         std::vector<std::string_view> stops_names_on_route = detail::ParseRoute(route_str);
-        
-        // сюда будем записывать набор уникальных остановок
-        std::unordered_set<std::string_view> unique_stops;
 
-        std::vector<transport::Stop*> stops_on_route;
+        catalogue.AddBus(bus_name, stops_names_on_route);
 
-        for (std::string_view stop_name_cur : stops_names_on_route) {
-            // ищем остановку в справочнике
-            transport::Stop* stop_cur = catalogue.FindStop(stop_name_cur);
-            // если нашлась, то добавляем в список остановок по автобусу
-            if (!stop_cur->name.empty()) {
-                // добавляем название остановки в перечень уникальных
-                unique_stops.insert(stop_cur->name);
-                // перемещаем остановку в массив остановок
-                stops_on_route.push_back(std::move(stop_cur));
-            }
-            // если не нашлась, то остановка не будет добавлена
-            // можно добавлять "пустую" остановку, имеющую только имя
-        }
-
-        // заполняем информацию о маршруте
-        transport::Bus bus_cur;
-        bus_cur.name = bus_name;
-        bus_cur.stops_on_route = std::move(stops_on_route);
-        bus_cur.unique_stops = std::move(unique_stops);
-        
-        // добавляем маршрут в справочник 
-        catalogue.AddBus(std::move(bus_cur));
     }
     return;
 }
