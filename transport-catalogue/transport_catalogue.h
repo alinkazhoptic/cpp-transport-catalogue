@@ -4,6 +4,7 @@
 
 #include <string>
 #include <deque>
+#include <memory>
 #include <optional>
 #include <unordered_map>
 #include <unordered_set>
@@ -30,6 +31,8 @@ struct BusInfo {
     int num_of_stops_on_route;
     int num_of_unique_stops;
     double route_length;
+    double roads_route_length;
+    double geo_route_length;
 };
 
 
@@ -39,14 +42,15 @@ struct StopInfo {
 };
 
 
-using StopsPair = std::pair<Stop*, Stop>;
+using StopsPair = std::pair<const Stop*, const Stop*>;
+using DistancesVector = std::vector<std::pair<std::string, int>>;
 
 
 // Класс (структура) для хеша, учитывающего пару остановок
 struct StopsPairHasher {
     size_t operator()(const StopsPair& stops_pair) const {
         // вытаскиваем имена остановок из пары и складываем как строки
-        std::string names_cobination = stops_pair.first->name + stops_pair.second.name;                 
+        std::string names_cobination = stops_pair.first->name + stops_pair.second->name;                 
         return hasher(names_cobination);
     }
     std::hash<std::string> hasher;
@@ -57,13 +61,27 @@ class TransportCatalogue {
     // Реализуйте класс самостоятельно
 public:
 
-    TransportCatalogue() = default;
+    TransportCatalogue();
 
-    // запрещаем копирование, ибо негоже тырить наши данные
-    TransportCatalogue(const TransportCatalogue& other) = delete;
+    ~TransportCatalogue(); // Деструктор здесь важен. Его тело будет в .cpp файле
+
+    // Перемещающий конструктор класса unique_ptr не бросает исключений,
+    // поэтому мы можем гарантировать отсутствие исключений при перемещении 
+    TransportCatalogue(TransportCatalogue&&) noexcept;
+    TransportCatalogue& operator=(TransportCatalogue&&) noexcept;
+
+    // Копирующие конструктор и оператор присваивания
+    TransportCatalogue(const TransportCatalogue& other);
+    TransportCatalogue& operator=(const TransportCatalogue& other);
     
+    // Добавляет остановку в каталог 
     void AddStop(Stop new_stop);
+    // Добавляет остановку и расстояния в каталог 
+    void AddStop(Stop new_stop, const DistancesVector& distances_to_stops);
+
+    // Добавляет автобус в каталог
     void AddBus(Bus new_bus);
+    // Добавляет маршрут (автобус) и его остановки в каталог
     void AddBus(std::string_view bus_name, const std::vector<std::string_view>& stops_names);
 
     const Stop* FindStop(std::string_view stop_name) const;
@@ -85,15 +103,8 @@ public:
 
 
 private:
-    std::deque<Stop> stops_;
-    std::unordered_map<std::string_view, Stop*> stops_dictionary_;
-
-    std::deque<Bus> buses_;
-    std::unordered_map<std::string_view, Bus*> buses_dictionary_;
-
-    std::unordered_map<std::string_view, std::vector<std::string_view>> busses_at_stop_;
-
-    std::unordered_map<StopsPair, double, StopsPairHasher> distances_; 
+    struct Impl;
+    std::unique_ptr<Impl> impl_; 
 
 };
 

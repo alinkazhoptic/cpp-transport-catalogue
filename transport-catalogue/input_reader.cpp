@@ -8,27 +8,6 @@ using namespace std::literals;
 using namespace loading;
 
 namespace detail {
-/**
- * Парсит строку вида "10.123,  -30.1837" и возвращает пару координат (широта, долгота)
- */
-geo::Coordinates ParseCoordinates(std::string_view str) {
-    static const double nan = std::nan("");
-
-    auto not_space = str.find_first_not_of(' ');
-    auto comma = str.find(',');
-
-    if (comma == str.npos) {
-        return {nan, nan};
-    }
-
-    auto not_space2 = str.find_first_not_of(' ', comma + 1);
-
-    double lat = std::stod(std::string(str.substr(not_space, comma - not_space)));
-    double lng = std::stod(std::string(str.substr(not_space2)));
-
-    return {lat, lng};
-}
-
 
 /* Закомментировано, потому что оказалось, что удалять лишние пробелы внутри названий не требуется, 
 что странно, т.к. в реальной жизни может привести к некорректному поведению
@@ -95,21 +74,106 @@ std::vector<std::string_view> Split(std::string_view string, char delim) {
 
 
 /**
+ * Разбивает строку string на 2 строки, с помощью указанной строки-разделителя delim
+ */
+std::pair<std::string_view, std::string_view> SplitIntoTwoStrings(std::string_view string_sv, std::string delim) {
+    std::pair<std::string_view, std::string_view> result;
+
+    int pos_delim = string_sv.find(delim);
+    std::string_view str_left = string_sv.substr(0, pos_delim);
+    str_left = Trim(str_left);
+    std::string_view str_right = string_sv.substr(pos_delim + delim.size());
+    str_right = Trim(str_right);
+
+    return {str_left, str_right};
+}
+
+
+/**
+ * Парсит строку вида "10.123,  -30.1837" и возвращает пару координат (широта, долгота)
+ */
+geo::Coordinates ParseCoordinates(std::string_view str) {
+    static const double nan = std::nan("");
+
+    auto not_space = str.find_first_not_of(' ');
+    auto comma = str.find(',');
+
+    if (comma == str.npos) {
+        return {nan, nan};
+    }
+
+    auto not_space2 = str.find_first_not_of(' ', comma + 1);
+
+    double lat = std::stod(std::string(str.substr(not_space, comma - not_space)));
+    double lng = std::stod(std::string(str.substr(not_space2)));
+
+    return {lat, lng};
+}
+
+
+/**
+ * Парсит строку вида "   10.123,    " и возвращает одну координату (широту, долготу)
+ */
+double ParseOneCoordinate(std::string_view str) {
+    std::string_view str_wo_spaces = Trim(str);
+    double coordinate = std::stod(std::string(str_wo_spaces));
+    return coordinate;
+}
+
+
+/**
+ * Парсит две строки вида "   10.123,    " и возвращает координаты (широту, долготу)
+ */
+geo::Coordinates ParseCoordinates(std::string_view str_lat, std::string_view str_lng) {
+    return {ParseOneCoordinate(str_lat), ParseOneCoordinate(str_lng)};
+}
+
+
+/**
  * Парсит маршрут.
  * Для кольцевого маршрута (A>B>C>A) возвращает массив названий остановок [A,B,C,A]
  * Для некольцевого маршрута (A-B-C-D) возвращает массив названий остановок [A,B,C,D,C,B,A]
  */
 std::vector<std::string_view> ParseRoute(std::string_view route) {
+    // случай линеййного маршрута
     if (route.find('>') != route.npos) {
         return Split(route, '>');
     }
 
+    // случай кольцевого маршрута
     auto stops = Split(route, '-');
     std::vector<std::string_view> results(stops.begin(), stops.end());
     results.insert(results.end(), std::next(stops.rbegin()), stops.rend());
 
     return results;
 }
+
+std::string_view ExtractStopName(std::string_view stop_line_sv){
+
+/*     int pos_to = stop_line_sv.find("to");
+    stop_line_sv = stop_line_sv.substr(pos_to + 2);
+    stop_line_sv = Trim(stop_line_sv);
+    return stop_line_sv; */
+    return SplitIntoTwoStrings(stop_line_sv, "to").second;
+}
+
+
+/**
+ * Парсит одно расстояние из строки вида " 7500m to Rossoshanskaya ulitsa ".
+*/
+std::pair<std::string, int> ParseOneDistance(std::string_view str) {
+    // удаляем крайние пробелы
+    std::string_view str_wo_spaces = Trim(str);
+    // разделяем строку на части по размерности [метры] - m
+    std::pair<std::string_view, std::string_view> data_splited = SplitIntoTwoStrings(str_wo_spaces, "m");
+    // вытаскиваем расстояние
+    int distance = std::stoi(std::string(data_splited.first));
+    // вытаскиваем название остановки
+    // std::string_view stop_name_sv = data_splited.at(1);
+    std::string stop_name = std::string(ExtractStopName(data_splited.second));
+    return {stop_name, distance};
+}
+
 
 
 CommandDescription ParseCommandDescription(std::string_view line) {
@@ -158,17 +222,29 @@ void InputReader::AddStopsToCatalogue([[maybe_unused]] transport::TransportCatal
         // DeleteExcessIntraSpaces(stop_name);  // удаляем лишние пробелы в середине
         // stop_name = DeleteExcessIntraSpaces(stop_name)
 
+        // формируем вектор данных:
+        std::vector<std::string_view> data_list = detail::Split(command_cur.description,',');
+        geo::Coordinates coordinates = detail::ParseCoordinates(data_list.at(0), data_list.at(1));
 
-        // вытаскиваем координаты:
+        // формируем вектор названий остановок и расстояний до них:
+        std::vector<std::pair<std::string, int>> distances_to_stops_cur;
+        for (int i = 2; i < data_list.size(); i++) {
+            distances_to_stops_cur.push_back(detail::ParseOneDistance(data_list.at(i)));
+        } 
+
+
+        /* // вытаскиваем координаты:
         std::string_view coordinates_str = detail::Trim(command_cur.description);
         // DeleteExcessIntraSpaces(coordinates_str);  // удалили лишние пробелы
         geo::Coordinates coordinates = detail::ParseCoordinates(coordinates_str);
+        */
 
         transport::Stop stop_cur;
         stop_cur.name = stop_name;
         stop_cur.coordinates = coordinates; 
 
-        catalogue.AddStop(std::move(stop_cur));
+        catalogue.AddStop(std::move(stop_cur), distances_to_stops_cur);
+        // catalogue.AddStop(std::move(stop_cur));
     }
     return;
 }

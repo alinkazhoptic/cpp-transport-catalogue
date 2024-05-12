@@ -57,11 +57,17 @@ void ParseAndPrintStat(const TransportCatalogue& transport_catalogue, std::strin
             return;
         }
 
+        double curvature = 0;
+        if (bus_info->geo_route_length != 0) {
+            curvature = bus_info->roads_route_length / bus_info->geo_route_length;
+        }
+
         // Bus X: R stops on route, U unique stops, L route length
         output << "Bus "s << request_cur.id << ": "s;
         output << bus_info->num_of_stops_on_route << " stops on route, "s;
         output << bus_info->num_of_unique_stops << " unique stops, "s;
-        output << std::setprecision(6) << bus_info->route_length << " route length"s << std::endl;
+        output << std::setprecision(6) << bus_info->roads_route_length << " route length, "s;
+        output << std::setprecision(6) << curvature << " curvature"s << std::endl;
     }
 
     if (request_cur.request == "Stop"s) {
