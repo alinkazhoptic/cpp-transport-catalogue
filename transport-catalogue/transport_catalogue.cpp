@@ -158,32 +158,7 @@ struct TransportCatalogue::Impl {
         // остановка отправления (A)
         // const Stop* stop_base = FindStop(stop_name);
         for (const auto& [stop_dest_name, dist] : distances_to_stops) {
-
             SetDistanceBetweenStops(stop_name, stop_dest_name, dist);
-            /* 
-            // остановка назначения
-            const Stop* stop_destin = FindStop(stop_dest_name);
-            // если такая остановка еще не существует, создадим её
-            if (!stop_destin) {
-                // создаем "пустую" остановку и добавляем в каталог
-                Stop new_stop_cur;
-                new_stop_cur.name = stop_dest_name;
-                AddStop(std::move(new_stop_cur));
-                // обновляем указатель
-                stop_destin = FindStop(stop_dest_name);
-            }
-            // формируем пары остановок: forward для A->B и reverse для B->A
-            const StopsPair stop_pair_forward = std::make_pair(stop_base, stop_destin);
-            const StopsPair stop_pair_reverse = std::make_pair(stop_destin, stop_base);
-            // Добавляем расстояние в прямом направлении (A->B)
-            // distances_.insert({stop_pair_forward, dist});
-            distances_[stop_pair_forward]= dist;
-
-            // Добавляем расстояние в обратном направлении (B->A), если оно ещё не указано
-            if (!distances_.count(stop_pair_reverse)) {
-                distances_.insert({stop_pair_reverse, dist});
-            } 
-            */ 
         }
     }
 
@@ -296,7 +271,8 @@ std::optional<StopInfo> GetStopInfo(std::string_view stop_name) const {
     return stop_info;
 }
 
-
+// Возвращает расстояние между существующими остановками.
+// Если указатели nullptr, выбросит исключение invalid_argument
 int GetDistanceBetweenStops(const Stop* stop_A, const Stop* stop_B) const {
     if (!stop_A || !stop_B) {
         throw std::invalid_argument("Pointer(s) to stop(s) is nullptr"s);
@@ -316,7 +292,7 @@ int GetDistanceBetweenStops(const Stop* stop_A, const Stop* stop_B) const {
     return distance;
 }
 
-
+// Возвращает расстояние между остановками, если остановок не существует, выбросит исключение invalid_argument
 int GetDistanceBetweenStops(std::string_view stop_A_name, std::string_view stop_B_name) const {
     const Stop* stop_A = FindStop(stop_A_name);
     const Stop* stop_B = FindStop(stop_B_name);
@@ -346,20 +322,7 @@ private:
             const Stop* stop_A = bus->stops_on_route[i];
             const Stop* stop_B = bus->stops_on_route[i+1];
             roads_length += GetDistanceBetweenStops(stop_A, stop_B);
-            /*
-            StopsPair forward_route = std::make_pair(stop_A, stop_B);
-            StopsPair reverse_route = std::make_pair(stop_B, stop_A);
-            if (distances_.count(forward_route)) {
-                roads_length += distances_.at(forward_route);
-            }
-            else if (distances_.count(reverse_route)) {
-                roads_length += distances_.at(reverse_route);
-            }
-            else {
-                std::cout << "Unknown distance between " << stop_A->name <<  " and " << stop_B->name << std::endl;
-                continue;
-            }
-            */
+
         }
         
         return roads_length;    
