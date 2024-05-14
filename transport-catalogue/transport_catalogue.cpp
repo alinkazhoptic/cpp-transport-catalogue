@@ -5,6 +5,8 @@
 #include <iostream>
 #include <numeric>
 
+using namespace std::literals;
+
 namespace transport {
 
 namespace detail {
@@ -49,35 +51,78 @@ struct TransportCatalogue::Impl {
 
     Impl() = default;
 
-    // Копирующий конструктор для структуры Impl
-    // Если копирование структуры Impl не сводится к простому копированию её полей,
-    // то пишем пользовательский конструктор копирования
-    Impl (const Impl& other) = default;
-/*         :buses_(other.buses_),
-        buses_dictionary_(other.buses_dictionary_),
-        busses_at_stop_(other.busses_at_stop_),
-        stops_dictionary_(other.stops_dictionary_),
-        stops_(other.stops_),
-        distances_(other.distances_) {} */
+    // Копирующий конструктор для структуры Impl - запрещаем, т.к. не требуется по заданию
+    // Копирование и присваивание Impl не сводится к простому присваиванию полей, так как они содержат указатели.
+    // Если потребуется оператор копирования, нужно будет реализовать вручную 
+    // (фактически создать и заполнить каталог по новой)
+    Impl (const Impl& other) = delete;
 
 
-    // Копирующий оператор присваивания
-    // Если присваивание Impl не сводится к простому присваиванию полей,
-    // нужно реализовать должным операцию присваивания вручную
-    Impl& operator=(const Impl& other)  = default;
-/*     {
-        if (this == &other) {
-            return *this;
+    // Копирующий оператор присваивания - запрещаем, т.к. не требуется по заданию
+    // Копирование и присваивание Impl не сводится к простому присваиванию полей, т.к. они содержат указатели.
+    // Если потребуется оператор копирования, нужно будет реализовать вручную 
+    // (фактически создать и заполнить каталог по новой)
+    Impl& operator=(const Impl& other) = delete;
+
+
+    // Добавляет остановку с заданным именем, которой ещё нет в каталоге
+    // Если остановка с таким именем уже существует, то получим исключение logic_error
+    // Если остановку добавить не получилось, то вернет nullptr
+    const Stop* CreateAndAddEmptyStop(std::string_view stop_name) {
+        // Если остановка есть, выбрасываем исключение
+        if (FindStop(stop_name)) {
+            throw std::logic_error("The stop with required name already exists!"s);
         }
-        this->buses_ = other.buses_;
-        this->buses_dictionary_ = other.buses_dictionary_;
-        this->busses_at_stop_ = other.busses_at_stop_;
-        this->stops_dictionary_ = other.stops_dictionary_;
-        this->stops_ = other.stops_;
-        this->distances_ = other.distances_;
-        return *this;
-    } */
-    
+        Stop new_stopA;
+        new_stopA.name = stop_name;
+        AddStop(std::move(new_stopA));
+        // получаем указатель на добавленную остановку
+        const Stop* stop_ptr = FindStop(stop_name);
+        return stop_ptr;
+    }
+
+
+    // Задает расстояние между существующими остановками. 
+    // ! Передаваемые указатели должны быть валидными, иначе расстояние не добавится
+    void SetDistanceBetweenStops(const Stop* stopA, const Stop* stopB, int distance) noexcept {
+        // Проверяем указатели:
+        if (!stopA || !stopB) {
+            std::cout << "The distance between stops = " << distance << " wasn't added\n";
+            return;
+        }
+        
+        // формируем пары остановок: forward для A->B и reverse для B->A
+        const StopsPair stop_pair_forward = std::make_pair(stopA, stopB);
+        const StopsPair stop_pair_reverse = std::make_pair(stopB, stopA);
+        
+        // Добавляем расстояние в прямом направлении (A->B)
+        distances_[stop_pair_forward] = distance;
+
+        // Добавляем расстояние в обратном направлении (B->A), если оно ещё не указано
+        if (!distances_.count(stop_pair_reverse)) {
+            distances_.insert({stop_pair_reverse, distance});
+        }
+    }
+
+
+    // Задает расстояние между остановками с указанными именами
+    // Если такой остановки не существует, она будет создана
+    void SetDistanceBetweenStops(std::string_view stopA_name, std::string_view stopB_name, int distance) {
+        const Stop* stopA_ptr = FindStop(stopA_name);
+        const Stop* stopB_ptr = FindStop(stopB_name);
+
+        // если остановки с данными именами еще не существуют, создадим их
+        if (!stopA_ptr) {
+            stopA_ptr = CreateAndAddEmptyStop(stopA_name);
+        }
+        if (!stopB_ptr) {
+            stopB_ptr = CreateAndAddEmptyStop(stopB_name);
+        }
+
+        SetDistanceBetweenStops(stopA_ptr, stopB_ptr, distance);
+    }
+   
+
 
     // Добавляет остановку в каталог
     void AddStop(Stop new_stop) {
@@ -111,8 +156,11 @@ struct TransportCatalogue::Impl {
 
         // Вытаскиваем расстояния и заполняем map distances_
         // остановка отправления (A)
-        const Stop* stop_base = FindStop(stop_name);
+        // const Stop* stop_base = FindStop(stop_name);
         for (const auto& [stop_dest_name, dist] : distances_to_stops) {
+
+            SetDistanceBetweenStops(stop_name, stop_dest_name, dist);
+            /* 
             // остановка назначения
             const Stop* stop_destin = FindStop(stop_dest_name);
             // если такая остановка еще не существует, создадим её
@@ -134,7 +182,8 @@ struct TransportCatalogue::Impl {
             // Добавляем расстояние в обратном направлении (B->A), если оно ещё не указано
             if (!distances_.count(stop_pair_reverse)) {
                 distances_.insert({stop_pair_reverse, dist});
-            }
+            } 
+            */ 
         }
     }
 
@@ -248,6 +297,37 @@ std::optional<StopInfo> GetStopInfo(std::string_view stop_name) const {
 }
 
 
+int GetDistanceBetweenStops(const Stop* stop_A, const Stop* stop_B) const {
+    if (!stop_A || !stop_B) {
+        throw std::invalid_argument("Pointer(s) to stop(s) is nullptr"s);
+    }
+    StopsPair forward_route = std::make_pair(stop_A, stop_B);
+    StopsPair reverse_route = std::make_pair(stop_B, stop_A);
+    int distance = 0;
+    if (distances_.count(forward_route)) {
+        distance = distances_.at(forward_route);
+    }
+    else if (distances_.count(reverse_route)) {
+        distance = distances_.at(reverse_route);
+    }
+    else {
+        std::cout << "Unknown distance between "s << stop_A->name <<  " and "s << stop_B->name << std::endl;
+    }
+    return distance;
+}
+
+
+int GetDistanceBetweenStops(std::string_view stop_A_name, std::string_view stop_B_name) const {
+    const Stop* stop_A = FindStop(stop_A_name);
+    const Stop* stop_B = FindStop(stop_B_name);
+    if (!stop_A || !stop_B) {
+        throw std::invalid_argument("Unknown stops' names"s);
+    }
+    int distance = GetDistanceBetweenStops(stop_A, stop_B);
+    return distance;
+}
+
+
 
 private:
     std::deque<Stop> stops_;
@@ -265,6 +345,8 @@ private:
         for (int i = 0; i < bus->stops_on_route.size() - 1; i++) {
             const Stop* stop_A = bus->stops_on_route[i];
             const Stop* stop_B = bus->stops_on_route[i+1];
+            roads_length += GetDistanceBetweenStops(stop_A, stop_B);
+            /*
             StopsPair forward_route = std::make_pair(stop_A, stop_B);
             StopsPair reverse_route = std::make_pair(stop_B, stop_A);
             if (distances_.count(forward_route)) {
@@ -277,7 +359,9 @@ private:
                 std::cout << "Unknown distance between " << stop_A->name <<  " and " << stop_B->name << std::endl;
                 continue;
             }
+            */
         }
+        
         return roads_length;    
     }
 };
@@ -335,15 +419,31 @@ std::optional<StopInfo> TransportCatalogue::GetStopInfo(std::string_view stop_na
     return impl_->GetStopInfo(stop_name);
 }
 
+/* 
+int TransportCatalogue::GetDistanceBetweenStops(const Stop* stop1, const Stop* stop2) const {
+    return impl_->GetDistanceBetweenStops(stop1, stop2);
+}
+ */
 
-// Копирующий конструктор
-TransportCatalogue::TransportCatalogue(const TransportCatalogue& other)
-// Если other не пуст, копируем его поле impl_
-: impl_(other.impl_ ? std::make_unique<Impl>(*other.impl_) : nullptr) {
+int TransportCatalogue::GetDistanceBetweenStops(std::string_view stop_A_name, std::string_view stop_B_name) const {
+    return impl_->GetDistanceBetweenStops(stop_A_name, stop_B_name);
+}
+
+// Задает расстояние между остановками с указанными именами
+// Если такой остановки не существует, она будет создана
+void TransportCatalogue::SetDistanceBetweenStops(std::string_view stopA_name, std::string_view stopB_name, int distance) {
+    return impl_->SetDistanceBetweenStops(stopA_name, stopB_name, distance);
 }
 
 
-// Копирующий оператор присваивания - вариант 1
+/* // Копирующий конструктор удален, так как копирование пока не требуется
+TransportCatalogue::TransportCatalogue(const TransportCatalogue& other)
+// Если other не пуст, копируем его поле impl_
+: impl_(other.impl_ ? std::make_unique<Impl>(*other.impl_) : nullptr) {
+} */
+
+
+// Копирующий оператор присваивания - вариант 1 - удален, т.к. не требуется, а реализация сложная
 /* TransportCatalogue& TransportCatalogue::operator=(const TransportCatalogue& other) {
     if (this != std::addressof(other)) {
         if (!other.impl_) {     // Правый аргумент пуст?
@@ -362,13 +462,13 @@ TransportCatalogue::TransportCatalogue(const TransportCatalogue& other)
 
 // А Можно присваивать так, если присваивание Impl не даёт 
 // заметных преимуществ в скорости или памяти перед копированием
-// Копирующий оператор присваивания - вариант 2
-TransportCatalogue& TransportCatalogue::operator=(const TransportCatalogue& other) {
+// Копирующий оператор присваивания - вариант 2 - удален, т.к. не требуется, а реализация сложная
+/* TransportCatalogue& TransportCatalogue::operator=(const TransportCatalogue& other) {
     if (this != std::addressof(other)) {
         impl_ = other.impl_ ? std::make_unique<Impl>(*other.impl_) : nullptr;
     }
     return *this;
-} 
+}  */
 
 
 

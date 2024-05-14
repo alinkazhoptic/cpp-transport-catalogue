@@ -70,9 +70,9 @@ public:
     TransportCatalogue(TransportCatalogue&&) noexcept;
     TransportCatalogue& operator=(TransportCatalogue&&) noexcept;
 
-    // Копирующие конструктор и оператор присваивания
-    TransportCatalogue(const TransportCatalogue& other);
-    TransportCatalogue& operator=(const TransportCatalogue& other);
+    // Копирующие конструктор и оператор присваивания - запрещаем, т.к. пока не требуются по заданию
+    TransportCatalogue(const TransportCatalogue& other) = delete;
+    TransportCatalogue& operator=(const TransportCatalogue& other) = delete;
     
     // Добавляет остановку в каталог 
     void AddStop(Stop new_stop);
@@ -99,6 +99,12 @@ public:
      * если остановка есть, но автобусы через нее не проходят, то buses_list будет пуст
     */
     std::optional<StopInfo> GetStopInfo(std::string_view stop_name) const;
+
+    // int GetDistanceBetweenStops(const Stop* stop1, const Stop* stop2) const;
+
+    int GetDistanceBetweenStops(std::string_view stop_A_name, std::string_view stop_B_name) const;
+
+    void SetDistanceBetweenStops(std::string_view stopA_name, std::string_view stopB_name, int distance);
 
 
 
