@@ -11,50 +11,17 @@
 #include <vector>
 #include <utility>
 
+#include "domain.h"
+
 namespace transport{
 
-struct Stop {
-    std::string name;
-    geo::Coordinates coordinates;
-};
-
-
-struct Bus {
-    std::string name;
-    std::vector<const Stop*> stops_on_route;
-    std::unordered_set<std::string_view> unique_stops;
-};
-
-
-struct BusInfo {
-    std::string name;
-    int num_of_stops_on_route;
-    int num_of_unique_stops;
-    double route_length;
-    double roads_route_length;
-    double geo_route_length;
-};
-
-
-struct StopInfo {
-    std::string name;
-    std::vector<std::string_view> buses_list;
-};
+using namespace domain;
 
 
 using StopsPair = std::pair<const Stop*, const Stop*>;
+// Вектор пар <остановка-расстояние до нее>
 using DistancesVector = std::vector<std::pair<std::string, int>>;
 
-
-// Класс (структура) для хеша, учитывающего пару остановок
-struct StopsPairHasher {
-    size_t operator()(const StopsPair& stops_pair) const {
-        // вытаскиваем имена остановок из пары и складываем как строки
-        std::string names_cobination = stops_pair.first->name + stops_pair.second->name;                 
-        return hasher(names_cobination);
-    }
-    std::hash<std::string> hasher;
-};
 
 
 class TransportCatalogue {
@@ -82,7 +49,7 @@ public:
     // Добавляет автобус в каталог
     void AddBus(Bus new_bus);
     // Добавляет маршрут (автобус) и его остановки в каталог
-    void AddBus(std::string_view bus_name, const std::vector<std::string_view>& stops_names);
+    void AddBus(std::string_view bus_name, const std::vector<std::string_view>& stops_names, bool round_flag);
 
     const Stop* FindStop(std::string_view stop_name) const;
     const Bus* FindBus(std::string_view bus_name) const;
@@ -99,6 +66,24 @@ public:
      * если остановка есть, но автобусы через нее не проходят, то buses_list будет пуст
     */
     std::optional<StopInfo> GetStopInfo(std::string_view stop_name) const;
+
+
+    /*
+    Возвращает вектор всех автобусов в сортированном порядке
+    */
+    std::vector<std::pair<std::string_view, const Bus*>> GetAllBuses() const;
+
+    /*
+    Возвращает вектор всех остановок
+    */
+    std::vector<const Stop*> GetAllStops() const;
+
+    /*
+    Возвращает вектор всех остановок, через которые проходят автобусы
+    */
+    std::vector<const Stop*> GetAllStopsBusPassingThrough() const;
+
+
 
     // int GetDistanceBetweenStops(const Stop* stop1, const Stop* stop2) const;
 

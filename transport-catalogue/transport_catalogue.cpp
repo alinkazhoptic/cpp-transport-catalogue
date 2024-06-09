@@ -5,10 +5,11 @@
 #include <iostream>
 #include <numeric>
 
-using namespace std::literals;
+using namespace std::literals; 
+using namespace domain;
 
 namespace transport {
-
+/*
 namespace detail {
 
 // проверяет, есть ли остановка/инфа об остановке по указателю
@@ -44,7 +45,7 @@ double ComputeGeoRouteLength(const Bus* bus) {
 
 
 } // namespace detail
-
+*/
 
 // Структура TransportCatalogue::Impl содержит детали реализации класса TransportCatalogue
 struct TransportCatalogue::Impl {
@@ -87,7 +88,7 @@ struct TransportCatalogue::Impl {
     void SetDistanceBetweenStops(const Stop* stopA, const Stop* stopB, int distance) noexcept {
         // Проверяем указатели:
         if (!stopA || !stopB) {
-            std::cout << "The distance between stops = " << distance << " wasn't added\n";
+            std::cerr << "The distance between stops = " << distance << " wasn't added\n";
             return;
         }
         
@@ -179,7 +180,7 @@ struct TransportCatalogue::Impl {
     }
 
 
-    void AddBus(std::string_view bus_name, const std::vector<std::string_view>& stops_names) {
+    void AddBus(std::string_view bus_name, const std::vector<std::string_view>& stops_names, bool round_flag) {
         // сюда будем записывать набор уникальных остановок
         std::unordered_set<std::string_view> unique_stops;
         // а здесь собирать указатели на найденные остановки 
@@ -189,7 +190,9 @@ struct TransportCatalogue::Impl {
             // ищем остановку в справочнике
             const transport::Stop* stop_cur = FindStop(stop_name_cur);
             // если нашлась, то добавляем в список остановок по автобусу
-            if (!stop_cur->name.empty()) {
+            if (stop_cur) { //было ->name.empty();
+                // добавляем в список остановок, через которые проходят автобусы
+                stops_with_buses_going_through_them_.insert(stop_cur);
                 // добавляем название остановки в перечень уникальных
                 unique_stops.insert(stop_cur->name);
                 // перемещаем остановку в массив остановок
@@ -204,6 +207,7 @@ struct TransportCatalogue::Impl {
         bus_cur.name = bus_name;
         bus_cur.stops_on_route = stops_on_route;  // было с move
         bus_cur.unique_stops = std::move(unique_stops);
+        bus_cur.is_round = round_flag;
 
         // добавляем маршрут в справочник 
         AddBus(std::move(bus_cur));   
@@ -234,7 +238,7 @@ struct TransportCatalogue::Impl {
 */
 std::optional<BusInfo> GetBusInfo(std::string_view bus_name) const{
     const Bus* bus_ptr = FindBus(bus_name);
-    if (!detail::IsBus(bus_ptr)) {
+    if (!domain::IsBus(bus_ptr)) {
         return std::nullopt;
     }
     BusInfo bus_info;
@@ -242,7 +246,7 @@ std::optional<BusInfo> GetBusInfo(std::string_view bus_name) const{
     bus_info.name = bus_ptr->name;  // добавляем имя
     bus_info.num_of_stops_on_route = bus_ptr->stops_on_route.size();  // добавляем количество всех остановок
     bus_info.num_of_unique_stops = bus_ptr->unique_stops.size();  // // добавляем количество уникальных остановки
-    bus_info.geo_route_length = detail::ComputeGeoRouteLength(bus_ptr);  // считаем и добавляем длину прямого пути
+    bus_info.geo_route_length = domain::ComputeGeoRouteLength(bus_ptr);  // считаем и добавляем длину прямого пути
     bus_info.roads_route_length = ComputeRoadRouteLength(bus_ptr); // считаем и добавляем длину пути по дорогам
 
     return bus_info;
@@ -257,12 +261,21 @@ std::optional<BusInfo> GetBusInfo(std::string_view bus_name) const{
     */
 std::optional<StopInfo> GetStopInfo(std::string_view stop_name) const {
     const Stop* stop_ptr = FindStop(stop_name);
-    if (!detail::IsStop(stop_ptr)) {
+    if (!domain::IsStop(stop_ptr)) {
         return std::nullopt;
+        // return StopInfo{};
     }
 
     // вытаскиваем автобусы по данной остановке, список автобусов м.б. пуст
     std::vector<std::string_view> buses_at_stop = busses_at_stop_.at(stop_name);
+    
+    /* 
+    // Не знаю, как правильно выводить, если автобусов нет: пустой массив или nullopt, ранее тесты прошли с выводом пустого массива вместо nullopt
+    if (buses_at_stop.empty()) {
+        return std::nullopt;
+    } 
+    */
+
     // сортируем по алфавиту
     std::sort(buses_at_stop.begin(), buses_at_stop.end());
     // формируем выходную информацию
@@ -270,6 +283,66 @@ std::optional<StopInfo> GetStopInfo(std::string_view stop_name) const {
 
     return stop_info;
 }
+
+
+// Получение сортированного вектора всех маршрутов автобусов с названиями и указателями
+std::vector<std::pair<std::string_view, const Bus*>> GetAllBuses() {
+    using namespace std;
+    
+    // Формируем вектор из unordered_map, так как потребуется сортировка
+    vector<pair<string_view, const Bus*>> buses_vector;
+    
+    // Возвращаем пустой вектор, если автобусов в каталоге нет совсем
+    if (buses_dictionary_.empty()) {
+        return buses_vector;
+    }
+
+    for (const auto& single_bus_data : buses_dictionary_ ) {
+        buses_vector.push_back(single_bus_data);
+    }
+
+    // Сортируем автобусы по названию маршрута
+    sort(buses_vector.begin(), buses_vector.end(), 
+        [](const auto& left, const auto& right) 
+        {return left.first < right.first;
+        });
+
+    return buses_vector;
+}
+
+// Возвращает вектор всех остановокъ
+std::vector<const Stop*> GetAllStops() const {
+    std::vector<const Stop*> stops_list;
+    // проверяем, что остановки есть в базе
+    if (stops_dictionary_.size() == 0) {
+        std::cerr << "LOG err: Failed in GetAllStops -> stops_dictionary is empty!"sv << std::endl; 
+        return stops_list;
+    }
+    // резервируем место
+    stops_list.reserve(stops_dictionary_.size());
+    for (const auto& stop_data : stops_dictionary_) {
+        stops_list.push_back(stop_data.second);
+    }
+    return stops_list;
+}
+
+// Возвращает остановки (указатели), через которые проходят автобусы (хотя бы один)
+// Остановки сортированы по имени
+std::vector<const Stop*> GetStopsBusPassingThrough() const {
+    std::vector<const Stop*> stops_having_buses;
+    for (const auto& stop : stops_with_buses_going_through_them_) {
+        // Дополнительная проверка, что на остановке есть автобусы
+        if (busses_at_stop_.at(stop->name).size() > 0) {
+            stops_having_buses.push_back(stop);
+        }
+    }
+    std::sort(stops_having_buses.begin(), stops_having_buses.end(), 
+        [](const auto& left_stop, const auto& right_stop){
+        return left_stop->name < right_stop->name;});
+    return stops_having_buses;
+}
+
+
 
 // Возвращает расстояние между существующими остановками.
 // Если указатели nullptr, выбросит исключение invalid_argument
@@ -287,7 +360,7 @@ int GetDistanceBetweenStops(const Stop* stop_A, const Stop* stop_B) const {
         distance = distances_.at(reverse_route);
     }
     else {
-        std::cout << "Unknown distance between "s << stop_A->name <<  " and "s << stop_B->name << std::endl;
+        std::cerr << "Unknown distance between "s << stop_A->name <<  " and "s << stop_B->name << std::endl;
     }
     return distance;
 }
@@ -314,10 +387,16 @@ private:
 
     std::unordered_map<std::string_view, std::vector<std::string_view>> busses_at_stop_;
 
-    std::unordered_map<StopsPair, double, StopsPairHasher> distances_; 
+    std::unordered_map<StopsPair, int, StopsPairHasher> distances_; 
+
+    std::unordered_set<const Stop*, StopHasher> stops_with_buses_going_through_them_;
 
     double ComputeRoadRouteLength(const Bus* bus) const {
         double roads_length = 0;
+        // не имеет смысла считать расстояния, если остановка всего одна
+        if (bus->stops_on_route.size() < 2) {
+            return roads_length;
+        }
         for (int i = 0; i < bus->stops_on_route.size() - 1; i++) {
             const Stop* stop_A = bus->stops_on_route[i];
             const Stop* stop_B = bus->stops_on_route[i+1];
@@ -362,8 +441,8 @@ void TransportCatalogue::AddBus(Bus new_bus) {
     impl_->AddBus(std::move(new_bus));  // тут была передача аргумента через std::move
 }
 
-void TransportCatalogue::AddBus(std::string_view bus_name, const std::vector<std::string_view>& stops_names) {
-    impl_->AddBus(bus_name, stops_names);
+void TransportCatalogue::AddBus(std::string_view bus_name, const std::vector<std::string_view>& stops_names, bool round_flag) {
+    impl_->AddBus(bus_name, stops_names, round_flag);
 }
 
 const Stop* TransportCatalogue::FindStop(std::string_view stop_name) const {
@@ -382,6 +461,21 @@ std::optional<StopInfo> TransportCatalogue::GetStopInfo(std::string_view stop_na
     return impl_->GetStopInfo(stop_name);
 }
 
+std::vector<std::pair<std::string_view, const Bus*>> TransportCatalogue::GetAllBuses() const {
+    return impl_->GetAllBuses();
+}
+
+std::vector<const Stop*> TransportCatalogue::GetAllStops() const {
+    return impl_->GetAllStops();
+}
+
+/*
+Возвращает вектор всех остановок, через которые проходят автобусы
+*/
+std::vector<const Stop*> TransportCatalogue::GetAllStopsBusPassingThrough() const {
+    return impl_->GetStopsBusPassingThrough();
+}
+
 /* 
 int TransportCatalogue::GetDistanceBetweenStops(const Stop* stop1, const Stop* stop2) const {
     return impl_->GetDistanceBetweenStops(stop1, stop2);
@@ -397,42 +491,6 @@ int TransportCatalogue::GetDistanceBetweenStops(std::string_view stop_A_name, st
 void TransportCatalogue::SetDistanceBetweenStops(std::string_view stopA_name, std::string_view stopB_name, int distance) {
     return impl_->SetDistanceBetweenStops(stopA_name, stopB_name, distance);
 }
-
-
-/* // Копирующий конструктор удален, так как копирование пока не требуется
-TransportCatalogue::TransportCatalogue(const TransportCatalogue& other)
-// Если other не пуст, копируем его поле impl_
-: impl_(other.impl_ ? std::make_unique<Impl>(*other.impl_) : nullptr) {
-} */
-
-
-// Копирующий оператор присваивания - вариант 1 - удален, т.к. не требуется, а реализация сложная
-/* TransportCatalogue& TransportCatalogue::operator=(const TransportCatalogue& other) {
-    if (this != std::addressof(other)) {
-        if (!other.impl_) {     // Правый аргумент пуст?
-            impl_.reset();
-        } else if (impl_) {     // Левый и правый аргументы не пустые?
-            assert(other.impl_);
-            *impl_ = *other.impl_;
-        } else {                // Левый аргумент пуст, а правый не пуст
-            assert(!impl_ && other.impl_);
-            impl_ = std::make_unique<Impl>(*other.impl_);
-        }
-    }
-    return *this;
-} */
-
-
-// А Можно присваивать так, если присваивание Impl не даёт 
-// заметных преимуществ в скорости или памяти перед копированием
-// Копирующий оператор присваивания - вариант 2 - удален, т.к. не требуется, а реализация сложная
-/* TransportCatalogue& TransportCatalogue::operator=(const TransportCatalogue& other) {
-    if (this != std::addressof(other)) {
-        impl_ = other.impl_ ? std::make_unique<Impl>(*other.impl_) : nullptr;
-    }
-    return *this;
-}  */
-
 
 
 }  // namespace transport
