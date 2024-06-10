@@ -194,13 +194,13 @@ private:
     RenderingFormatOptions render_options_;
 
     // Формирует линии маршрутов и добавляет их в документ
-    void DrawRoutes(std::vector<std::pair<std::string_view, const domain::Bus*>> all_buses_data, const detail::SphereProjector& coord_projector);
+    void DrawRoutes(const std::vector<std::pair<std::string_view, const domain::Bus*>>& all_buses_data, const detail::SphereProjector& coord_projector);
 
     // Формирует линию для одного маршрута
-    svg::Polyline MakeRouteLine(std::vector<const domain::Stop*> stops, const detail::SphereProjector& projector, svg::Color line_color, double line_width) const; 
+    svg::Polyline MakeRouteLine(const std::vector<const domain::Stop*>& stops, const detail::SphereProjector& projector, svg::Color line_color, double line_width) const; 
 
     // Формирует названия автобусов и добавляет их в документ
-    void DrawBusLables(std::vector<std::pair<std::string_view, const domain::Bus*>> all_buses_data, const detail::SphereProjector& coord_projector);
+    void DrawBusLables(const std::vector<std::pair<std::string_view, const domain::Bus*>>& all_buses_data, const detail::SphereProjector& coord_projector);
 
     // Формирует заданный текст в заданных герграфических координатах
     svg::Text MakeOneLable(const std::string& text, const geo::Coordinates& coordinates, const detail::SphereProjector& projector);
@@ -223,7 +223,7 @@ private:
     Label MakeOneStopLable(const std::string& text, const geo::Coordinates coordinates, const detail::SphereProjector& projector) const; 
 
     // Формирует правило преобразования (масштабирования) координат  
-    detail::SphereProjector ConfigureCoordinateProjector(std::vector<const domain::Stop*> all_stops_data) const;
+    detail::SphereProjector ConfigureCoordinateProjector(const std::vector<const domain::Stop*>& all_stops_data) const;
 
 
 };

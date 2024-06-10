@@ -184,8 +184,8 @@ private:
     // Читает JSON из потока
     json::Document ReadJson(std::istream& input) const;
 
-    void AddStopsToCatalogue([[maybe_unused]] transport::TransportCatalogue& catalogue) const;
-    void AddBusesToCatalogue([[maybe_unused]] transport::TransportCatalogue& catalogue) const;
+    void AddStopsToCatalogue(transport::TransportCatalogue& catalogue) const;
+    void AddBusesToCatalogue(transport::TransportCatalogue& catalogue) const;
 
     // Добавляет запрос типа base_request в базу к stop_requests или bus_requests 
     void AddRequestToCommands(const json::Dict& request_map);

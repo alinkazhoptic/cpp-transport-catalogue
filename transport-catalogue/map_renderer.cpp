@@ -18,7 +18,7 @@ void MapRenderer::Render(std::ostream& output) const {
     map_document_.Render(output);
 }
 
-svg::Polyline MapRenderer::MakeRouteLine(std::vector<const domain::Stop*> stops, const detail::SphereProjector& projector, svg::Color line_color, double line_width) const {
+svg::Polyline MapRenderer::MakeRouteLine(const std::vector<const domain::Stop*>& stops, const detail::SphereProjector& projector, svg::Color line_color, double line_width) const {
     svg::Polyline route_line;
     // Идем по остановкам и добавляем координаты в полилинию
     for (const auto& stop_ptr : stops) {
@@ -38,7 +38,7 @@ svg::Polyline MapRenderer::MakeRouteLine(std::vector<const domain::Stop*> stops,
 
 
 // Формирует линии маршрутов в соответствии с заданным правилом преобразования координат и добавляет их в документ
-void MapRenderer::DrawRoutes(std::vector<std::pair<std::string_view, const domain::Bus*>> all_buses_data, const detail::SphereProjector& coord_projector) {
+void MapRenderer::DrawRoutes(const std::vector<std::pair<std::string_view, const domain::Bus*>>& all_buses_data, const detail::SphereProjector& coord_projector) {
     auto color_it = render_options_.color_palete_.begin();
     // Двойной цикл, внешний - по автобусам
     for (const auto& cur_bus_data : all_buses_data ) {
@@ -108,7 +108,7 @@ Label MapRenderer::MakeBusLable(const std::string& text, const geo::Coordinates&
 
 
 // Формирует названия автобусов и добавляет их в документ
-void MapRenderer::DrawBusLables(std::vector<std::pair<std::string_view, const domain::Bus*>> all_buses_data, const detail::SphereProjector& coord_projector) {
+void MapRenderer::DrawBusLables(const std::vector<std::pair<std::string_view, const domain::Bus*>>& all_buses_data, const detail::SphereProjector& coord_projector) {
     // 0. Задаем начальный цвет
     auto color_it = render_options_.color_palete_.begin();
     // 1. Идем по автобусам
@@ -237,7 +237,7 @@ void MapRenderer::DrawMap(const std::vector<const domain::Stop*>& all_stops, con
 
 
 // Формирует правило преобразования (масштабирования) координат  
-detail::SphereProjector MapRenderer::ConfigureCoordinateProjector(std::vector<const domain::Stop*> all_stops_data) const {
+detail::SphereProjector MapRenderer::ConfigureCoordinateProjector(const std::vector<const domain::Stop*>& all_stops_data) const {
     // 0. Создаем вектор всех координат
     std::vector<geo::Coordinates> all_coordinates;
     // резервируем место, чтоб не тратить ресурсы на накладные расходы

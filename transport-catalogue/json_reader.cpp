@@ -21,11 +21,11 @@ void JsonReader::LoadJson(std::istream& input) {
     document_with_requests_ = std::move(ReadJson(input));
 }
 
-namespace detail {
+
 /**
  * Удаляет пробелы в начале и конце строки
  */
-std::string_view Trim(std::string_view string) {
+static std::string_view Trim(std::string_view string) {
     const auto start = string.find_first_not_of(' ');
     if (start == string.npos) {
         return {};
@@ -36,7 +36,7 @@ std::string_view Trim(std::string_view string) {
 
 // Преобразует узел json-документа в цвет
 // Необходима, так как цвет может быть записан в json разными способами: строкой, в координатах RBG или RGBa
-svg::Color GetColorFromJsonNode(const json::Node& color_node) {
+static svg::Color GetColorFromJsonNode(const json::Node& color_node) {
     if (color_node.IsArray()) {
         json::Array color_array = color_node.AsArray();
         if (color_array.size() == 3) {
@@ -70,7 +70,8 @@ svg::Color GetColorFromJsonNode(const json::Node& color_node) {
 
 // Вспомогательная функция для обнаружения параметров в settings map json и записи их в структуру, 
 // Предназначена для сокращения функции GetRenderSettingsFromDocument
-void ParseParameters(const json::Dict& settings_map, renderer::RenderingFormatOptions& render_options) {
+static renderer::RenderingFormatOptions ParseRenderingParameters(const json::Dict& settings_map) {
+    renderer::RenderingFormatOptions render_options;
     if (settings_map.count("width")) {
         render_options.picture_size_.width = settings_map.at("width").AsDouble();       
     }
@@ -116,7 +117,7 @@ void ParseParameters(const json::Dict& settings_map, renderer::RenderingFormatOp
     if (settings_map.count("color_palette")) {
         if (!settings_map.at("color_palette").IsArray()) {
             // ошибка, должен быть непустой массив
-            std::cerr << "LOG err: in ParseParameters color palette is not an array!"sv << std::endl;
+            std::cerr << "LOG err: in ParseRenderingParameters color palette is not an array!"sv << std::endl;
         }
         json::Array colors_json_array = settings_map.at("color_palette").AsArray();
         std::vector<svg::Color> color_vector;
@@ -125,11 +126,13 @@ void ParseParameters(const json::Dict& settings_map, renderer::RenderingFormatOp
         } 
         render_options.color_palete_ = std::move(color_vector);       
     }
+
+    return render_options;
 }
 
 
 // Общая функция для формирования структуры настроек отрисовки
-renderer::RenderingFormatOptions GetRenderSettingsFromDocument(const json::Document& document) {
+static renderer::RenderingFormatOptions GetRenderSettingsFromDocument(const json::Document& document) {
     // Создаем структуру, которую будем заполнять значениями из документа
     // По умолчанию она заполнена некоторыми адекватными значениями
     renderer::RenderingFormatOptions render_options;
@@ -152,7 +155,7 @@ renderer::RenderingFormatOptions GetRenderSettingsFromDocument(const json::Docum
         json::Dict settings_map = settings_node.AsMap(); 
 
         // 3. Поэлементно добавляем в структуру параметров параметры из json-документа
-        ParseParameters(settings_map, render_options);  // функция изменит render_options, для этого он передается по НЕконстантной ссылке
+        render_options = ParseRenderingParameters(settings_map);  // функция изменит render_options, для этого он передается по НЕконстантной ссылке
 
     }
     catch (std::logic_error& e) {
@@ -166,15 +169,12 @@ renderer::RenderingFormatOptions GetRenderSettingsFromDocument(const json::Docum
 }
 
 
-}  //namespace detail
-
-
 // Обработка запросов на добавление остановок
 // Идем по списку команд и обрабатывааем только запросы на добавление остановок
-void JsonReader::AddStopsToCatalogue([[maybe_unused]] transport::TransportCatalogue& catalogue) const {
+void JsonReader::AddStopsToCatalogue(transport::TransportCatalogue& catalogue) const {
     for(const auto& command_cur : stop_commands_) {
         // если запрос не про остановку, то переходим к следующему запросу
-        if (detail::Trim(command_cur.GetCommandType()) != "Stop"s) {
+        if (Trim(command_cur.GetCommandType()) != "Stop"s) {
             continue;
         }
         
@@ -190,11 +190,11 @@ void JsonReader::AddStopsToCatalogue([[maybe_unused]] transport::TransportCatalo
 
 // Обработка запросов на добавление маршрутов автобусов
 // идем по списку команд и обрабатываем только добавление автобусов
-void JsonReader::AddBusesToCatalogue([[maybe_unused]] transport::TransportCatalogue& catalogue) const {
+void JsonReader::AddBusesToCatalogue(transport::TransportCatalogue& catalogue) const {
         // 1. Обработка запросов на добавление маршрутов автобусов
     for(const BusCommand& command_cur : bus_commands_) {
         // если запрос не про остановку, то переходим к следующему запросу
-        if (detail::Trim(command_cur.GetCommandType()) != "Bus"s) {
+        if (Trim(command_cur.GetCommandType()) != "Bus"s) {
             continue;
         }
         // Формируем вектор остановок с учетом типа маршрута
@@ -215,7 +215,7 @@ void JsonReader::AddBusesToCatalogue([[maybe_unused]] transport::TransportCatalo
 }
 
 
-void JsonReader::ApplyCommands([[maybe_unused]] transport::TransportCatalogue& catalogue) {
+void JsonReader::ApplyCommands(transport::TransportCatalogue& catalogue) {
     // Реализуйте метод самостоятельно
     // Считываем команды из документа 
     FormAllRequestsData(document_with_requests_);
@@ -232,14 +232,14 @@ void JsonReader::ApplyCommands([[maybe_unused]] transport::TransportCatalogue& c
 
 void JsonReader::ApplyRenderSettings(renderer::MapRenderer& renderer) const {
     // Формируем структуру
-    renderer::RenderingFormatOptions parameters = detail::GetRenderSettingsFromDocument(document_with_requests_);
+    renderer::RenderingFormatOptions parameters = GetRenderSettingsFromDocument(document_with_requests_);
     // Задаем/передаем параметры отрисовщику 
     renderer.SetFormatOptions(parameters);
 
 }
 
 
-StopCommand FormStopCommand(const json::Dict& request_map) {
+static StopCommand FormStopCommand(const json::Dict& request_map) {
     if (request_map.at("type").AsString() != "Stop"s) {
         throw std::logic_error("LOG err: in FormStopCommand command type is not \"Stop\" => command_type : "s + request_map.at("type").AsString() );
     }
@@ -259,7 +259,7 @@ StopCommand FormStopCommand(const json::Dict& request_map) {
 }
 
 
-BusCommand FormBusCommand(const json::Dict& request_map) {
+static BusCommand FormBusCommand(const json::Dict& request_map) {
     // инициируем новую команду на добавление маршрута
     BusCommand bus_command;
     // Записываем имя
@@ -389,7 +389,7 @@ void JsonReader::PrintResponse(std::ostream& output) const {
 }
 
 // Обрабатывает один запрос типа Stop и возвращает словарь данных ответа на запрос
-json::Dict ProcessStopRequest(const RequestHandler& request_handler, const RequestDescription& request) {
+static json::Dict ProcessStopRequest(const RequestHandler& request_handler, const RequestDescription& request) {
     if (request.type != "Stop") {
         throw std::invalid_argument("Request is not about Stop"s);
     }
@@ -421,7 +421,7 @@ json::Dict ProcessStopRequest(const RequestHandler& request_handler, const Reque
 }
 
 // Обрабатывает один запрос типа Bus и возвращает словарь данных ответа на запрос
-json::Dict ProcessBusRequest(const RequestHandler& request_handler, const RequestDescription& request) {
+static json::Dict ProcessBusRequest(const RequestHandler& request_handler, const RequestDescription& request) {
     if (request.type != "Bus") {
         throw std::invalid_argument("Request is not about Bus"s);
     }
