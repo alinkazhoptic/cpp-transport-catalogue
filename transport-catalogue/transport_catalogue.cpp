@@ -397,7 +397,7 @@ private:
         if (bus->stops_on_route.size() < 2) {
             return roads_length;
         }
-        for (int i = 0; i < bus->stops_on_route.size() - 1; i++) {
+        for (size_t i = 0; i < bus->stops_on_route.size() - 1; i++) {
             const Stop* stop_A = bus->stops_on_route[i];
             const Stop* stop_B = bus->stops_on_route[i+1];
             roads_length += GetDistanceBetweenStops(stop_A, stop_B);

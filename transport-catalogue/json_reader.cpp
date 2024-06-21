@@ -138,21 +138,21 @@ static renderer::RenderingFormatOptions GetRenderSettingsFromDocument(const json
     renderer::RenderingFormatOptions render_options;
     try {
         // 0. Получаем map запросов
-        if (!document.GetRoot().IsMap()) {
+        if (!document.GetRoot().IsDict()) {
             std::cerr << "LOG err: in GetRenderSettingsFromDocument document.GetRoot() is not a map! \n Default render options is be used!"sv << std::endl;
             return render_options;
         }
-        json::Dict main_node = document.GetRoot().AsMap();
+        json::Dict main_node = document.GetRoot().AsDict();
         
         // 1. Парсим запросы "render_settings"
         json::Node settings_node = main_node.at("render_settings");
         
         // Проверяем, что render_settings правильно считалась как map
-        if (!settings_node.IsMap()) {
+        if (!settings_node.IsDict()) {
             std::cerr << "There is no render_settings" << std::endl;
         }
         // 2. Получаем словарь параметров
-        json::Dict settings_map = settings_node.AsMap(); 
+        json::Dict settings_map = settings_node.AsDict(); 
 
         // 3. Поэлементно добавляем в структуру параметров параметры из json-документа
         render_options = ParseRenderingParameters(settings_map);  // функция изменит render_options, для этого он передается по НЕконстантной ссылке
@@ -250,7 +250,7 @@ static StopCommand FormStopCommand(const json::Dict& request_map) {
     // Вытаскиваем и записываем координаты
     stop_command.SetCoordinates(request_map.at("latitude").AsDouble(), request_map.at("longitude").AsDouble());
     // Вытаскиваем и записываем расстояния
-    json::Dict distances_in_request = request_map.at("road_distances").AsMap();
+    json::Dict distances_in_request = request_map.at("road_distances").AsDict();
     for (const auto& [stop, distance] : distances_in_request) {
         stop_command.AddDistance(stop, distance.AsInt());
     }
@@ -318,11 +318,11 @@ void JsonReader::AddRequestToRequests(const json::Dict& request_map) {
 void JsonReader::FormAllRequestsData(const json::Document& document) {
     try {
         // Проверяем, что запросы это map
-        if (!document.GetRoot().IsMap()) {
+        if (!document.GetRoot().IsDict()) {
             return;
         }
         // 0. Получаем map запросов
-        json::Dict main_node = document.GetRoot().AsMap();
+        json::Dict main_node = document.GetRoot().AsDict();
         
         // 1. Парсим запросы "base_requests"
         json::Node base_requests_node = main_node.at("base_requests");
@@ -332,13 +332,13 @@ void JsonReader::FormAllRequestsData(const json::Document& document) {
             json::Array base_request_array = base_requests_node.AsArray();
             for (const auto& request : base_request_array) {
                 // вытаскиваем данные текущей команды
-                json::Dict request_map = request.AsMap();
+                json::Dict request_map = request.AsDict();
                 AddRequestToCommands(request_map);
             }
         }
-        else if (base_requests_node.IsMap()) {
+        else if (base_requests_node.IsDict()) {
             // Обрабатываем один запрос
-            json::Dict request_map = base_requests_node.AsMap();
+            json::Dict request_map = base_requests_node.AsDict();
             AddRequestToCommands(request_map);
         }
         // to do: закомментировать следующий else
@@ -354,13 +354,13 @@ void JsonReader::FormAllRequestsData(const json::Document& document) {
             json::Array stat_requests_array = stat_requests_node.AsArray();
             for (const auto& request : stat_requests_array) {
                 // вытаскиваем данные текущей команды
-                json::Dict stat_request_map = request.AsMap();
+                json::Dict stat_request_map = request.AsDict();
                 AddRequestToRequests(stat_request_map);
             }
         }
         // Когда запрос один
-        else if (stat_requests_node.IsMap()) {
-            json::Dict stat_request_map = stat_requests_node.AsMap();
+        else if (stat_requests_node.IsDict()) {
+            json::Dict stat_request_map = stat_requests_node.AsDict();
             AddRequestToRequests(stat_request_map);
         }
         // to do: закомментировать следующий else
@@ -394,7 +394,8 @@ static json::Dict ProcessStopRequest(const RequestHandler& request_handler, cons
         throw std::invalid_argument("Request is not about Stop"s);
     }
     // инициализируем map для ответа на текущий запрос
-    json::Dict response_map({{"request_id"s, json::Node(request.id)}});
+    // json::Dict response_map({{"request_id"s, json::Node(request.id)}});
+    json::Dict response_map;
 
     std::optional<domain::StopInfo> stop_stat = request_handler.GetBusesByStop(request.name);
     
@@ -402,7 +403,6 @@ static json::Dict ProcessStopRequest(const RequestHandler& request_handler, cons
     if (stop_stat.has_value()) {
         // получаем автобусы и записываем их в map
         json::Array buses_array;
-        // std::vector<std::string> buses;
 
         // цикл нужен, чтобы привести к string, т.к. в Node используется тип string
         for (const auto& bus_name : stop_stat.value().buses_list) {
@@ -410,15 +410,32 @@ static json::Dict ProcessStopRequest(const RequestHandler& request_handler, cons
         }
     
         // добавляем автобусы к map-е ответа
-        response_map.insert({"buses"s, buses_array});
+        // response_map.insert({"buses"s, buses_array});
+        // Инициируем map и сразу с помощью Builder добавляем данные по запросу и автобусам
+        response_map = json::Builder{}
+                                .StartDict()
+                                    .Key("request_id"s).Value(request.id)
+                                    .Key("buses"s).Value(buses_array)
+                                .EndDict()
+                                .Build()
+                                .AsDict();
     }
     // случай 2) Остановка не найдена:
     else {
-        response_map.insert({"error_message"s, json::Node("not found"s)});
+        // response_map.insert({"error_message"s, json::Node("not found"s)});
+        response_map = json::Builder{}
+                                .StartDict()
+                                    .Key("request_id"s).Value(request.id)
+                                    .Key("error_message"s).Value("not found"s)
+                                .EndDict()
+                                .Build()
+                                .AsDict();
+
     }
 
     return response_map;
 }
+
 
 // Обрабатывает один запрос типа Bus и возвращает словарь данных ответа на запрос
 static json::Dict ProcessBusRequest(const RequestHandler& request_handler, const RequestDescription& request) {
@@ -426,7 +443,8 @@ static json::Dict ProcessBusRequest(const RequestHandler& request_handler, const
         throw std::invalid_argument("Request is not about Bus"s);
     }
     // инициализируем map для ответа на текущий запрос
-    json::Dict response_map({{"request_id"s, json::Node(request.id)}});
+    // json::Dict response_map({{"request_id"s, json::Node(request.id)}});
+    json::Dict response_map;
 
     std::optional<domain::BusInfo> bus_stat = request_handler.GetBusStat(request.name);
     
@@ -435,14 +453,34 @@ static json::Dict ProcessBusRequest(const RequestHandler& request_handler, const
         // считаем кривизну
         double curvature = bus_stat.value().roads_route_length / bus_stat.value().geo_route_length;
         // получаем параметры и записываем их в map-у
+        response_map = json::Builder{}
+                                .StartDict()
+                                    .Key("request_id"s).Value(request.id)
+                                    .Key("route_length"s).Value(bus_stat.value().roads_route_length)
+                                    .Key("curvature"s).Value(curvature)
+                                    .Key("stop_count"s).Value(bus_stat.value().num_of_stops_on_route)
+                                    .Key("unique_stop_count"s).Value(bus_stat.value().num_of_unique_stops)
+                                .EndDict()
+                                .Build()
+                                .AsDict();
+        /* 
         response_map.insert({"route_length"s, json::Node(bus_stat.value().roads_route_length)});
         response_map.insert({"curvature"s, json::Node(curvature)});
         response_map.insert({"stop_count"s, json::Node(bus_stat.value().num_of_stops_on_route)});
-        response_map.insert({"unique_stop_count"s, json::Node(bus_stat.value().num_of_unique_stops)});
+        response_map.insert({"unique_stop_count"s, json::Node(bus_stat.value().num_of_unique_stops)}); 
+        */
+
     }
     // случай 2) Остановка не найдена:
     else {
-        response_map.insert({"error_message"s, json::Node("not found"s)});
+        // response_map.insert({"error_message"s, json::Node("not found"s)});
+        response_map = json::Builder{}
+                                .StartDict()
+                                    .Key("request_id"s).Value(request.id)
+                                    .Key("error_message"s).Value("not found"s)
+                                .EndDict()
+                                .Build()
+                                .AsDict();
     }
 
     return response_map;
@@ -455,7 +493,8 @@ json::Dict JsonReader::ProcessMapRequest(RequestHandler& request_handler, const 
         throw std::invalid_argument("Request is not a Map"s);
     }
     // инициализируем map для ответа на текущий запрос
-    json::Dict response_map({{"request_id"s, json::Node(request.id)}});
+    // json::Dict response_map({{"request_id"s, json::Node(request.id)}});
+    json::Dict response_map;
     
     // Применяем параметры отображения svg
     ApplyRenderSettings(request_handler.GetMaprenderer());
@@ -465,7 +504,14 @@ json::Dict JsonReader::ProcessMapRequest(RequestHandler& request_handler, const 
     request_handler.RenderMap(svg_stream);
     std::string svg_text = svg_stream.str();
 
-    response_map.insert({"map", svg_text});
+    // response_map.insert({"map", svg_text});
+    response_map = json::Builder{}
+                            .StartDict()
+                                .Key("request_id"s).Value(request.id)
+                                .Key("map"s).Value(svg_text)
+                            .EndDict()
+                            .Build()
+                            .AsDict();
 
     return response_map;
 }
@@ -490,13 +536,13 @@ json::Dict JsonReader::ProcessOneRequest(RequestHandler& request_handler, const 
  * Отправляет запросы к транспортному каталогу, 
  * принимает ответы и формирует json::Document 
 */
-// const json::Document& JsonReader::ProcessRequestsAndGetResponse(transport::TransportCatalogue& catalogue) {
 const json::Document& JsonReader::ProcessRequestsAndGetResponse(RequestHandler& request_handler) {
     // создаем обработчик запросов, к которому будем обращаться
     // RequestHandler request_handler(catalogue);
     // проверяем, есть ли запросы к базе:
     if (stat_requests_.size() == 0) {
-        response_document_ = json::Document(json::Node("null"s));
+        response_document_ = json::Document(json::Builder{}.Value("null"s).Build());
+        // response_document_ = json::Document(json::Node("null"s));
         return response_document_;
     }
     /* else if (stat_requests_.size() == 1) {
@@ -511,7 +557,9 @@ const json::Document& JsonReader::ProcessRequestsAndGetResponse(RequestHandler& 
             response_array.emplace_back(response_map_cur);
         }
         // актуализируем документ ответов 
-        response_document_ = json::Document(json::Node(response_array));
+        // response_document_ = json::Document(json::Node(response_array));
+        response_document_ = json::Document(json::Builder{}.Value(response_array).Build());
+        
     }
     // возвращаем измененный документ с ответами
     return response_document_;

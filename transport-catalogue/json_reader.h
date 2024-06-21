@@ -3,6 +3,7 @@
 #include "map_renderer.h"
 #include "request_handler.h"
 #include "json.h"
+#include "json_builder.h"
 
 #include <vector>
 #include <sstream>
