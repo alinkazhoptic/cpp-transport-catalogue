@@ -25,7 +25,19 @@ public:
 
     // Node(const Value& value) : variant(value) {}
 
-    Node(Value&& value) : variant(value) {}
+    Node(Value&& value) : variant(std::move(value)) {}
+
+    // Конструктор копирования
+    Node(const Node& node) : variant(node.GetValue()) {}
+
+    // Конструктор перемещения
+    Node(Node&& node) : variant(std::move(node.GetValue())) {}
+
+    // Оператор присваивания копирующий
+    Node& operator=(const Node& other) = default;
+
+    // Оператор присваивания перемещающий
+    Node& operator=(Node&& other) = default;
 
     // Node(Value value) : variant(std::move(value)) {}
 
@@ -115,7 +127,7 @@ public:
     }
 
     // Получить root_, который можно изменять
-    Value& GetVarValue() {
+    Value& GetValue() {
         return *this;
     }
 };
