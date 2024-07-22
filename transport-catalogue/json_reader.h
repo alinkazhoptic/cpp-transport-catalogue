@@ -4,7 +4,9 @@
 #include "request_handler.h"
 #include "json.h"
 #include "json_builder.h"
+#include "transport_router.h"
 
+#include <optional>
 #include <vector>
 #include <sstream>
 #include <string>
@@ -141,9 +143,30 @@ struct RequestDescription {
         return !operator bool();
     }
 
+    bool IsRoute() const {
+        return (type == "Route"s);
+    }
+
+    bool IsMap() const {
+        return (type == "Map"s);
+    }
+
+    bool IsBus() const {
+        return (type == "Bus"s);
+    }
+
+    bool IsStop() const {
+        return (type == "Stop"s);
+    }
+
+
+
     std::string type;      // Название команды
-    std::string name;      // название маршрута или остановки
-    int id;                // id (номер) запроса  
+    std::optional<std::string> name;      // название маршрута или остановки для запросов Bus и Ыещз
+    int id;                // id (номер) запроса
+    std::optional<std::string> route_from_stop; // для запроса маршрута - начальная остановка
+    std::optional<std::string> route_to_stop;   // для запроса маршрута - конечная остановка
+
 };
 
 }  // namespace request_detail
@@ -173,7 +196,6 @@ public:
     const json::Document& ProcessRequestsAndGetResponse(RequestHandler& request_handler);
 
 
-
 private:
     json::Document document_with_requests_ = json::Document(json::Node());
     json::Document response_document_ = json::Document(json::Node());
@@ -181,6 +203,9 @@ private:
     std::vector<request_detail::StopCommand> stop_commands_;
     std::vector<request_detail::BusCommand> bus_commands_;
     std::vector<request_detail::RequestDescription> stat_requests_;
+
+    std::unique_ptr<routing::TransportRouter> router_ptr_;
+    // routing::TransportRouter router_ptr_;
 
     // Читает JSON из потока
     json::Document ReadJson(std::istream& input) const;
@@ -201,5 +226,20 @@ private:
 
     // Обрабатывает один запрос типа Map и возвращает словарь данных ответа на запрос
     json::Dict ProcessMapRequest(RequestHandler& request_handler, const request_detail::RequestDescription& request) const;
+
+    // Обрабатывает один запрос типа Route и возвращает словарь данных ответа на запрос "items", "request_id", "total_time"
+    json::Dict ProcessRouteRequest(const request_detail::RequestDescription& request) const;
+
+    // Сортируем так, чтобы все запросы пути шли в конце
+    void SortRequests() {
+        sort(stat_requests_.begin(), stat_requests_.end(),[](const auto& left_req, const auto& right_req) {
+            return (!left_req.IsRoute() && right_req.IsRoute() );
+        });
+    }
+
+    void BuildRouterForRouteRequests(RequestHandler& request_handler);
+
+
+
 
 };

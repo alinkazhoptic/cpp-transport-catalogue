@@ -346,7 +346,8 @@ std::vector<const Stop*> GetStopsBusPassingThrough() const {
 
 // Возвращает расстояние между существующими остановками.
 // Если указатели nullptr, выбросит исключение invalid_argument
-int GetDistanceBetweenStops(const Stop* stop_A, const Stop* stop_B) const {
+// Если расстояния нет в базе выдаст nullopt
+std::optional<int> GetDistanceBetweenStops(const Stop* stop_A, const Stop* stop_B) const {
     if (!stop_A || !stop_B) {
         throw std::invalid_argument("Pointer(s) to stop(s) is nullptr"s);
     }
@@ -361,19 +362,19 @@ int GetDistanceBetweenStops(const Stop* stop_A, const Stop* stop_B) const {
     }
     else {
         std::cerr << "Unknown distance between "s << stop_A->name <<  " and "s << stop_B->name << std::endl;
+        return {};
     }
     return distance;
 }
 
 // Возвращает расстояние между остановками, если остановок не существует, выбросит исключение invalid_argument
-int GetDistanceBetweenStops(std::string_view stop_A_name, std::string_view stop_B_name) const {
+std::optional<int> GetDistanceBetweenStops(std::string_view stop_A_name, std::string_view stop_B_name) const {
     const Stop* stop_A = FindStop(stop_A_name);
     const Stop* stop_B = FindStop(stop_B_name);
     if (!stop_A || !stop_B) {
         throw std::invalid_argument("Unknown stops' names"s);
     }
-    int distance = GetDistanceBetweenStops(stop_A, stop_B);
-    return distance;
+    return GetDistanceBetweenStops(stop_A, stop_B);
 }
 
 
@@ -400,7 +401,7 @@ private:
         for (size_t i = 0; i < bus->stops_on_route.size() - 1; i++) {
             const Stop* stop_A = bus->stops_on_route[i];
             const Stop* stop_B = bus->stops_on_route[i+1];
-            roads_length += GetDistanceBetweenStops(stop_A, stop_B);
+            roads_length += *GetDistanceBetweenStops(stop_A, stop_B);
 
         }
         
@@ -482,7 +483,7 @@ int TransportCatalogue::GetDistanceBetweenStops(const Stop* stop1, const Stop* s
 }
  */
 
-int TransportCatalogue::GetDistanceBetweenStops(std::string_view stop_A_name, std::string_view stop_B_name) const {
+std::optional<int> TransportCatalogue::GetDistanceBetweenStops(std::string_view stop_A_name, std::string_view stop_B_name) const {
     return impl_->GetDistanceBetweenStops(stop_A_name, stop_B_name);
 }
 

@@ -47,8 +47,15 @@ public:
 
     renderer::MapRenderer& GetMaprenderer();
 
+    const transport::TransportCatalogue& GetTransportCatalogue() const;
+
+    std::optional<int> GetDistanceBetweenAdjacentStops(std::string_view stop_A_name, std::string_view stop_B_name) const;
+
+
+
 private:
     // RequestHandler использует агрегацию объектов "Транспортный Справочник" и "Визуализатор Карты"
     const transport::TransportCatalogue& db_;
     renderer::MapRenderer& map_renderer_;
+
 };

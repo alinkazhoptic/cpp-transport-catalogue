@@ -227,7 +227,7 @@ void MapRenderer::DrawMap(const std::vector<const domain::Stop*>& all_stops, con
     // Отрисовть названия маршрутов
     DrawBusLables(all_buses, projector);
     
-    // Отрисовать остановки, пока закомментировано, потому что не требуется
+    // Отрисовать остановки
     DrawStops(all_stops, projector); 
 
     // Отрисовать названия остановок

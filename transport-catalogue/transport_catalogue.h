@@ -87,7 +87,7 @@ public:
 
     // int GetDistanceBetweenStops(const Stop* stop1, const Stop* stop2) const;
 
-    int GetDistanceBetweenStops(std::string_view stop_A_name, std::string_view stop_B_name) const;
+    std::optional<int> GetDistanceBetweenStops(std::string_view stop_A_name, std::string_view stop_B_name) const;
 
     void SetDistanceBetweenStops(std::string_view stopA_name, std::string_view stopB_name, int distance);
 

@@ -309,7 +309,11 @@ void JsonReader::AddRequestToRequests(const json::Dict& request_map) {
         request.name = request_map.at("name").AsString();
     }
     request.type = request_map.at("type").AsString();
-
+    // добавление инфы для запроса маршрута
+    if (request.type == "Route"s) {
+        request.route_from_stop = request_map.at("from").AsString();
+        request.route_to_stop = request_map.at("to").AsString();
+    }
     stat_requests_.push_back(std::move(request));
 }
 
@@ -367,6 +371,10 @@ void JsonReader::FormAllRequestsData(const json::Document& document) {
         else {
             std::cerr << "There is no stat_requests" << std::endl;
         }
+        
+        // Сортируем так, чтобы сначала шли запросы без пути
+        // SortRequests();
+        
     }
     catch (std::logic_error& e) {
         std::cerr << "LOG err: from json_reader FormAllRequestsData: main_node is not a map => "s << e.what() << std::endl;
@@ -397,7 +405,7 @@ static json::Dict ProcessStopRequest(const RequestHandler& request_handler, cons
     // json::Dict response_map({{"request_id"s, json::Node(request.id)}});
     json::Dict response_map;
 
-    std::optional<domain::StopInfo> stop_stat = request_handler.GetBusesByStop(request.name);
+    std::optional<domain::StopInfo> stop_stat = request_handler.GetBusesByStop(*request.name);
     
     // случай 1) Остановка найдена:
     if (stop_stat.has_value()) {
@@ -446,7 +454,7 @@ static json::Dict ProcessBusRequest(const RequestHandler& request_handler, const
     // json::Dict response_map({{"request_id"s, json::Node(request.id)}});
     json::Dict response_map;
 
-    std::optional<domain::BusInfo> bus_stat = request_handler.GetBusStat(request.name);
+    std::optional<domain::BusInfo> bus_stat = request_handler.GetBusStat(*request.name);
     
     // случай 1) Автобус найден в каталоге:
     if (bus_stat.has_value()) {
@@ -516,20 +524,185 @@ json::Dict JsonReader::ProcessMapRequest(RequestHandler& request_handler, const 
     return response_map;
 }
 
+// Преобразует данные маршрута в формат json::Array, 
+// чтобы потом его можно было запихнуть в словарь-ответа на запрос 
+json::Array TransformRouteItemsToJsonArray(const routing::TransportRouteItems& items) {
+    using namespace routing;
+    json::Array json_items;
+
+    for (size_t i = 0; i < items.size(); i++) {
+        json::Node node_tmp;
+        // шаг 1 - ожидание на остановке
+        if (std::holds_alternative<WaitRouteItem>(items[i])) {
+            // получаем кусок пути
+            WaitRouteItem wait_item = std::get<WaitRouteItem>(items[i]);
+            node_tmp = json::Builder{}.StartDict()
+                                            .Key("type"s).Value(wait_item.type)
+                                            .Key("time"s).Value(wait_item.duration)
+                                            .Key("stop_name"s).Value(wait_item.stop)
+                                        .EndDict()
+                                        .Build();
+
+        }
+        // шаг 2 - поездка на автобусе 
+        else if (std::holds_alternative<BusRouteItem>(items[i])) {
+            // получаем кусок пути
+            BusRouteItem bus_item = std::get<BusRouteItem>(items[i]);
+            node_tmp = json::Builder{}.StartDict()
+                                            .Key("type"s).Value(bus_item.type)
+                                            .Key("time"s).Value(bus_item.duration)
+                                            .Key("bus"s).Value(bus_item.bus)
+                                            .Key("span_count"s).Value(bus_item.span_count)
+                                        .EndDict()
+                                        .Build();
+        }
+        else {
+            throw std::invalid_argument("LOG err: in TransformRouteItemsToJsonArray - The item type in route is not Wait or Bus"s);
+        }
+        json_items.push_back(std::move(node_tmp));
+    }
+
+    return json_items;
+}
+
+json::Dict JsonReader::ProcessRouteRequest(const request_detail::RequestDescription& request) const {
+    // std::cout << "LOG start: ProcessRouteRequest ("s << request.id << ")"s << std::endl;
+    using namespace routing;
+    if (request.type != "Route") {
+        throw std::invalid_argument("Request is not a Route"s);
+    }
+    if (!request.route_from_stop || !request.route_to_stop) {
+        throw std::invalid_argument("Request is not a Route"s);
+    }
+    // инициализируем map для ответа на текущий запрос
+    json::Dict response_map;
+
+    std::optional<std::pair<TransportRouteItems, Duration>> route_info = router_ptr_->GetRouteInfo(*request.route_from_stop, *request.route_to_stop);
+    
+    // случай 1 - путь не найден
+    if (!route_info.has_value()) {
+        response_map = json::Builder{}.StartDict()
+                                            .Key("request_id"s).Value(request.id)
+                                            .Key("error_message"s).Value("not found"s)
+                                        .EndDict()
+                                        .Build()
+                                        .AsDict();
+        return response_map;
+    }
+
+    // случай 2 - остановка отправления и назначения совпадают - путь нулевой
+    if (route_info.value().first.empty() && route_info.value().second == 0) {
+        response_map = json::Builder{}.StartDict()
+                                            .Key("request_id"s).Value(request.id)
+                                            .Key("total_time").Value(0)
+                                            .Key("items").StartArray().EndArray()
+                                        .EndDict()
+                                        .Build()
+                                        .AsDict();
+        return response_map;
+    }
+
+    // случай 3 - общий / невырожденный
+    json::Array json_route_items = TransformRouteItemsToJsonArray(route_info.value().first);
+
+    response_map = json::Builder{}
+                            .StartDict()
+                                .Key("request_id"s).Value(request.id)
+                                .Key("total_time"s).Value(route_info.value().second)
+                                .Key("items"s).Value(json_route_items)
+                            .EndDict()
+                            .Build()
+                            .AsDict();
+    return response_map;
+
+}
+
 
 // Обрабатывает один запрос и возвращает словарь данных ответа на запрос
 json::Dict JsonReader::ProcessOneRequest(RequestHandler& request_handler, const RequestDescription& request) const {
     json::Dict response_map;
-    if (request.type == "Stop") {
+    if (request.IsStop() /* request.type == "Stop" */) {
         response_map = ProcessStopRequest(request_handler, request);
     }
-    else if (request.type == "Bus") {
+    else if (request.IsBus() /* request.type == "Bus" */) {
         response_map = ProcessBusRequest(request_handler, request);
     }
-    else if (request.type == "Map") {
+    else if (request.IsMap() /* request.type == "Map" */) {
         response_map = ProcessMapRequest(request_handler, request);
     }
+    else if (request.IsRoute()) {
+        response_map = ProcessRouteRequest(request);
+    }
     return response_map;
+}
+
+// Вспомогательная функция для GetRoutingSettingsFromDocument 
+// для извлечения параметров построения маршрута из словаря json::Dict
+routing::RoutingSettings ParseRoutingParameters(const json::Dict& settings_map) {
+    routing::RoutingSettings routing_options;
+    if (settings_map.count("bus_wait_time")) {
+        // время ожидания - целое число в минутах
+        routing_options.bus_wait_time = settings_map.at("bus_wait_time").AsInt();       
+    }
+    else {
+        std::cerr << "There is NO parameter bus_wait_time in commands. bus_wait_time = 0 minutes will be used\n"s;
+    }
+
+    if (settings_map.count("bus_velocity")) {
+        // скорость автобуса - вещественное число в км/ч
+        routing_options.bus_velocity = settings_map.at("bus_velocity").AsDouble();
+    }
+    else {
+        std::cerr << "There is NO parameter bus_velocity in commands. bus_velocity = 1 km/hour will be used\n"s;
+    }
+    return routing_options; 
+}
+
+// Возвращает параметры построения маршрута, обнаруженные в json-документе
+routing::RoutingSettings GetRoutingSettingsFromDocument (const json::Document& document) {
+    // Создаем структуру, которую будем заполнять значениями из документа
+    // По умолчанию она заполнена некоторыми адекватными значениями
+    routing::RoutingSettings routing_params;
+    try {
+        // 0. Получаем map запросов
+        if (!document.GetRoot().IsDict()) {
+            std::cerr << "LOG err: in GetRoutingSettingsFromDocument document.GetRoot() is not a map! \n Default routing options will be used!"sv << std::endl;
+            return routing_params;
+        }
+
+        json::Dict main_node = document.GetRoot().AsDict();
+        
+        // 1. Парсим запросы "routing_settings"
+        json::Node route_settings_node = main_node.at("routing_settings");
+        
+        // Проверяем, что render_settings правильно считалась как map
+        if (!route_settings_node.IsDict()) {
+            std::cerr << "There is no routing_settings" << std::endl;
+        }
+        // 2. Получаем словарь параметров
+        json::Dict settings_map = route_settings_node.AsDict(); 
+
+        // 3. Поэлементно добавляем в структуру параметров параметры из json-документа
+        routing_params = ParseRoutingParameters(settings_map);  
+    }
+    catch (std::logic_error& e) {
+        std::cerr << "LOG err: from json_reader GetRenderSettingsFromDocument: main_node is not a map => "s << e.what() << std::endl;
+    }
+    catch (std::exception& e) {
+        std::cerr << "LOG err: from json_reader GetRenderSettingsFromDocument: "s << e.what() << std::endl;
+    }
+
+    return routing_params;
+}
+
+
+void JsonReader::BuildRouterForRouteRequests(RequestHandler& request_handler) {
+    using namespace routing;
+    RoutingSettings routing_settings = GetRoutingSettingsFromDocument(document_with_requests_);
+    // сроим граф
+    TransportGraphMaker graph_maker(request_handler.GetTransportCatalogue(), routing_settings);
+    std::unique_ptr<TransportRouter> router_ptr_tmp = std::make_unique<TransportRouter>(std::move(graph_maker));
+    router_ptr_ = std::move(router_ptr_tmp);
 }
 
 /**
@@ -537,19 +710,20 @@ json::Dict JsonReader::ProcessOneRequest(RequestHandler& request_handler, const 
  * принимает ответы и формирует json::Document 
 */
 const json::Document& JsonReader::ProcessRequestsAndGetResponse(RequestHandler& request_handler) {
-    // создаем обработчик запросов, к которому будем обращаться
-    // RequestHandler request_handler(catalogue);
+    // При наличии запросов на маршруты создаем router 
+    const auto it = std::find_if(stat_requests_.begin(), stat_requests_.end(), 
+                            [](const RequestDescription& req) {
+                                return req.IsRoute();
+                            });
+    if (it != stat_requests_.end()) {
+        BuildRouterForRouteRequests(request_handler);
+    }
+    
     // проверяем, есть ли запросы к базе:
     if (stat_requests_.size() == 0) {
         response_document_ = json::Document(json::Builder{}.Value("null"s).Build());
-        // response_document_ = json::Document(json::Node("null"s));
         return response_document_;
     }
-    /* else if (stat_requests_.size() == 1) {
-        json::Dict response_map = ProcessOneRequest(request_handler, stat_requests_.at(0));
-        // актулизируем документ ответов
-        response_document_ = json::Document(json::Node(response_map));
-    } */
     else if (stat_requests_.size() >= 1) {
         json::Array response_array;
         for (const auto& request_cur : stat_requests_) {
@@ -557,7 +731,6 @@ const json::Document& JsonReader::ProcessRequestsAndGetResponse(RequestHandler& 
             response_array.emplace_back(response_map_cur);
         }
         // актуализируем документ ответов 
-        // response_document_ = json::Document(json::Node(response_array));
         response_document_ = json::Document(json::Builder{}.Value(response_array).Build());
         
     }

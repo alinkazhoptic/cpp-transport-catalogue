@@ -50,3 +50,11 @@ void RequestHandler::RenderMap(std::ostream& ouput_stream) {
 renderer::MapRenderer& RequestHandler::GetMaprenderer() {
     return map_renderer_;
 }
+
+const transport::TransportCatalogue& RequestHandler::GetTransportCatalogue() const {
+    return db_;
+}
+
+std::optional<int> RequestHandler::GetDistanceBetweenAdjacentStops(std::string_view stop_A_name, std::string_view stop_B_name) const {
+    return db_.GetDistanceBetweenStops(stop_A_name, stop_B_name);
+}
