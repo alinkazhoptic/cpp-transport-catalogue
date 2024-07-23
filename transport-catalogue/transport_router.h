@@ -1,7 +1,6 @@
 #pragma once
 
 #include "transport_catalogue.h"
-// #include "request_handler.h"
 #include "graph.h"
 #include "router.h"
 
@@ -17,13 +16,11 @@ namespace routing {
 const double METERS_IN_KM = 1000;
 const double MINUTES_IN_HOUR = 60;
 
-using namespace std::literals;
-
 using Duration = double;
 
 struct EdgeWeight {
     Duration duration = 0;
-    int bus_ind = 0;  // для ребра остановок bus_ind = -1
+    int bus_ind = 0;  // для ребра ожидания на остановке bus_ind = -1
     int span_count = 0;
     
     EdgeWeight() = default;
@@ -32,33 +29,7 @@ struct EdgeWeight {
     : duration(std::move(time))
     , bus_ind(std::move(bus_index))
     , span_count(std::move(span_number)) {}
-
-    EdgeWeight(const EdgeWeight& other) 
-    : duration(other.duration)
-    , bus_ind(other.bus_ind)
-    , span_count(other.span_count) {}
-
-    EdgeWeight(EdgeWeight&& other) 
-    : duration(std::move(other.duration))
-    , bus_ind(std::move(other.bus_ind))
-    , span_count(std::move(other.span_count)) {}
     
-    ~EdgeWeight() = default;
-
-    EdgeWeight& operator=(const EdgeWeight& other) {
-        this->bus_ind = other.bus_ind;
-        this->duration = other.duration;
-        this->span_count = other.span_count;
-        return *this;
-    }
-
-    EdgeWeight& operator=(EdgeWeight&& other) {
-        this->bus_ind = std::move(other.bus_ind);
-        this->duration = std::move(other.duration);
-        this->span_count = std::move(other.span_count);
-        return *this;
-    }
-
     EdgeWeight operator+(EdgeWeight rhs) const;
 
     EdgeWeight operator+(const EdgeWeight& rhs);
@@ -83,7 +54,7 @@ struct RoutingSettings {
 
 struct StopVertexes {
     size_t depart_ind = 0; // индекс узла, из которого можно уехать
-    size_t arrive_ind = 0; // индекс узла в который можно приехать
+    size_t arrive_ind = 0; // индекс узла, в который можно приехать
 
     StopVertexes() = default;
 
@@ -129,8 +100,6 @@ private:
     BusesList index_vs_buses_;
     std::unordered_map<std::string_view, int> buses_vs_index_;
 
-    // std::unordered_map<std::string_view, std::vector<size_t>> stop_vs_indexes_;
-
     // хранение остановок и их узлов, 
     // в паре соответственно: first - узел отправления, second - узел прибытия
     std::unordered_map<std::string_view, StopVertexes> stop_vs_indexes_; 
@@ -161,7 +130,7 @@ private:
     }
 
 
-    const StopVertexes& AddStopAndGetIndexes(const std::string_view stop_name);
+    const StopVertexes& AddStopAndGetIndexes(std::string_view stop_name);
 
     // Формирует по списку остановок узлы графа - маршруты между остановками 
     template<typename Iterator>
@@ -212,8 +181,8 @@ private:
 
 
 struct BusRouteItem {
-    const std::string type = "Bus"s;
-    std::string bus = ""s;
+    const std::string type = "Bus";
+    std::string bus;
     int span_count = 0;
     Duration duration = 0;
     
@@ -236,8 +205,8 @@ struct BusRouteItem {
 };
 
 struct WaitRouteItem {
-    const std::string type = "Wait"s; 
-    std::string stop = ""s;
+    const std::string type = "Wait"; 
+    std::string stop;
     Duration duration = 0;
 
     WaitRouteItem() = default;
@@ -262,43 +231,24 @@ using GraphRouteInfo = graph::Router<EdgeWeight>::RouteInfo;
 
 class TransportRouter {
 private:
-    // std::unique_ptr<TransportGraphMaker> graph_maker_;
     TransportGraphMaker graph_maker_;
-    // graph::Router<EdgeWeight> router_;
     std::unique_ptr<graph::Router<EdgeWeight>> router_;
     
 public:
     TransportRouter(TransportGraphMaker&& graph_maker) 
         : graph_maker_(std::move(graph_maker)) {
-        // graph_maker_ = std::make_unique<TransportGraphMaker>(graph_maker);
         router_ = std::make_unique<graph::Router<EdgeWeight>>(graph_maker_.GetGraph());
     }
-    // . graph_maker_(graph_maker)
-    // , router_(graph_maker.GetGraph())
-    // , router_(std::make_unique<graph::Router<EdgeWeight>>(graph_maker.GetGraph())) {}
-
-    // перемещающий конструктор
-    // TransportRouter(TransportRouter&& other) = default;
-
 
     std::optional<std::pair<TransportRouteItems, Duration>> GetRouteInfo(std::string_view from_stop, std::string_view to_stop) const;
 
 private:
 
     std::optional<GraphRouteInfo> FindFasterRoute(const std::vector<size_t>& from_stop_inds, const std::vector<size_t>& to_stop_inds) const {
-        // to do:
-        // std::cout << "LOG start: FindFasterRoute"s << std::endl;
         std::optional<GraphRouteInfo> fast_route;
         for (size_t from_ind : from_stop_inds) {
             for (size_t to_ind : to_stop_inds) {
-                
-                // to do: временно
-                // std::cout << "LOG start: BuildRoute"s << std::endl;
                 const auto& cur_route = router_->BuildRoute(from_ind, to_ind);
-                // to do: временно
-                // std::cout << "LOG end: BuildRoute"s << std::endl;
-
-                // const auto& cur_route = router_.BuildRoute(from_ind, to_ind);
                 if (!cur_route.has_value()) {
                     continue;
                 }
@@ -307,7 +257,6 @@ private:
                 }
             }
         }
-        // std::cout << "LOG end: FindFasterRoute"s << std::endl;
         return fast_route;
     }
 
@@ -317,8 +266,6 @@ private:
 
     // Формируеn вектор items (непрерывных шагов/активностей) и считает полную длительность маршрута
     std::pair<TransportRouteItems, Duration> CreateTransportRouteFromGraphRoute(const GraphRouteInfo& route_info) const;
-
-    
 
 };
 

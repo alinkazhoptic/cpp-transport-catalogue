@@ -26,7 +26,7 @@ bool routing::operator>=(const EdgeWeight& lhs, const EdgeWeight& rhs) {
 }
 
 EdgeWeight EdgeWeight::operator+(EdgeWeight rhs) const {
-    EdgeWeight new_weight (this->duration + rhs.duration, this->bus_ind + rhs.bus_ind, this->span_count /* + rhs.span_count*/);
+    EdgeWeight new_weight (this->duration + rhs.duration, this->bus_ind + rhs.bus_ind, this->span_count);
     return new_weight;
 }
 
@@ -82,7 +82,7 @@ std::size_t TransportGraphMaker::GetBusIndexByName(std::string_view bus_name) co
 
 
 // Добавляет остановку, если её еще нет в базе вершин и возвращает индексы соответствующих остановке узлов
-const StopVertexes& TransportGraphMaker::AddStopAndGetIndexes(const std::string_view stop_name) {
+const StopVertexes& TransportGraphMaker::AddStopAndGetIndexes(std::string_view stop_name) {
     // случай 1 - остановки ещё не в списке вершин
     if (!stop_vs_indexes_.count(stop_name)) {
         size_t n = index_vs_stop_.size();
@@ -140,12 +140,6 @@ void TransportGraphMaker::ParseAndFillRoundBusTrack(const domain::Bus* bus_ptr) 
 void TransportGraphMaker::FillContainersWithStopsAndEdges(const BusesList& buses) {
     // инициализируем начальные индексы и остановки - это необходимо для заполнения хеш-таблицы путей
     bus_velocity_in_m_per_minute_ = ConvertVelocity(settings_.bus_velocity);
-
-    // size_t cur_stop_index = 0;
-    // size_t prev_stop_index = 0;
-
-    // std::string_view cur_stop_name;
-    // std::string_view prev_stop_name;
     int cur_bus_ind = 0;
 
     for (const auto& [bus_name, bus_ptr] : buses) {
@@ -178,10 +172,7 @@ void TransportGraphMaker::PrintGraph() const {
         graph::Edge edge = graph_->GetEdge(i);
         std::cout << edge.from << "->" << edge.weight.duration << "min" << "->" << edge.to << std::endl;
     }
-
 }
-
-
 
 
 void TransportRouter::MoveWaitItemToList(WaitRouteItem& wait_item, TransportRouteItems& items, Duration& total_duration) const {
@@ -232,13 +223,6 @@ std::pair<TransportRouteItems, Duration> TransportRouter::CreateTransportRouteFr
         int bus_ind = edge_cur.weight.bus_ind;
 
         if (bus_ind < 0) { // ребро ожидания
-            /* 
-            // Добавляем ранее сформированную поездку на автобусе
-            if (!bus_item.Empty()) {
-                MoveBusItemToList(bus_item, items, duration_total);
-                bus_item.Clear();  // на всякий случай очищаем
-            } 
-            */
             // на всякий случай проверяем, что для ребра ожидания остановки from и to совпадают
             if (first_stop_name != second_stop_name) {
                 throw std::logic_error("LOG err: in GetRoute Start and Stop name do not match for wait edge"s);
@@ -263,10 +247,7 @@ std::pair<TransportRouteItems, Duration> TransportRouter::CreateTransportRouteFr
             // перемещаем её
             MoveBusItemToList(bus_item, items, duration_total);
             bus_item.Clear();
-            
-            // случаи 2+3 - выполнение поездки
-            // bus_item.duration += edge_cur.weight.duration;
-            // bus_item.span_count += 1;
+
         }
     }
 
@@ -279,14 +260,10 @@ std::pair<TransportRouteItems, Duration> TransportRouter::CreateTransportRouteFr
 
 
 std::optional<std::pair<TransportRouteItems, Duration>> TransportRouter::GetRouteInfo(std::string_view from_stop, std::string_view to_stop) const {
-    // to do: временный вывод
-    // std::cerr << "LOG start: GetRouteInfo (from - "s << from_stop << "to "s <<  to_stop << ")"s << std::endl;
-    // 0. Найти индексы остановок
+    // 0. Определяем индексы остановок отправления и назначения
     std::optional<StopVertexes> from_stop_inds = graph_maker_.GetStopIndexesByName(from_stop);
     std::optional<StopVertexes> to_stop_inds = graph_maker_.GetStopIndexesByName(to_stop);
     if (!from_stop_inds || !to_stop_inds) {
-        // to do: временный вывод
-        // std::cerr << "from or to stop is not found"s << std::endl;
         return{};
     }
 
@@ -297,19 +274,11 @@ std::optional<std::pair<TransportRouteItems, Duration>> TransportRouter::GetRout
         fast_route = {empty_weight, {}};
     }
     else {
-        // 1. Строим маршруты и одновременно ищем минимальный по дистанции
-        // std::optional<GraphRouteInfo> fast_route = FindFasterRoute(from_stop_inds.depart_ind, to_stop_inds.arrive_ind);
-        // to do: временное логирование
-        // std::cout << "LOG start: BuildRoute"s << std::endl;
-        fast_route = router_->BuildRoute((*from_stop_inds).depart_ind, (*to_stop_inds).arrive_ind);
-        // to do: временное логирование
-        // std::cout << "LOG end: BuildRoute"s << std::endl;
+        // 1. Находим самый быстрый маршрут
+        fast_route = router_->BuildRoute((*from_stop_inds).depart_ind, (*to_stop_inds).arrive_ind);   
     }
     
-    
-    
-
-    // проверяем на пустоту
+    // проверяем, что маршрут найден
     if (!fast_route) {
         return {};
     }
