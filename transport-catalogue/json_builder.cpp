@@ -140,7 +140,7 @@ Builder::BaseContext::BaseContext(Builder& builder)
 :builder_(builder) {}
 
 Builder::BaseContext Builder::BaseContext::Value(Node::Value value) {
-    return BaseContext(builder_.Value(value));
+    return BaseContext(builder_.Value(std::move(value)));
 }
 
 
@@ -151,7 +151,7 @@ Builder::DictItemContext Builder::BaseContext::StartDict() {
 
 Builder::DictValueContext Builder::BaseContext::Key(std::string key) {
     // DictValueContext dict_context(builder_.Key(key));
-    return builder_.Key(key);
+    return builder_.Key(std::move(key));
 }
 
 
@@ -184,11 +184,11 @@ Builder::DictValueContext::DictValueContext(Builder& builder) : Builder::BaseCon
 // Реализация некоторых методов для контекста элемента словаря
 
 Builder::DictItemContext Builder::DictValueContext::Value(Node::Value value) {
-    DictItemContext res(GetBuilder().Value(value));
+    DictItemContext res(GetBuilder().Value(std::move(value)));
     return res;
 }
 
 // Реализация некоторых методов для контекста элемента массива
 Builder::ArrayItemContext Builder::ArrayItemContext::Value(Node::Value value) {
-    return ArrayItemContext(GetBuilder().Value(value));
+    return ArrayItemContext(GetBuilder().Value(std::move(value)));
 }
